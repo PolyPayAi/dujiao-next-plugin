@@ -1,6 +1,6 @@
 # Dujiao-Next 原生 PolyPay 渠道（0.2.0 预览）
 
-此目录完整记录宿主源码修改。基线是上游 `41b86260dc9a60269526057eed8d915844ceb3a3`，修改后的本地宿主提交为 `b353044b3f2633a759405b9392e6d7dfcc3f2d68`。补丁适用范围、SHA-256 和逐文件修改清单见 [manifest.json](manifest.json)。宿主补丁遵循原项目 GPL-3.0，见 [LICENSE](LICENSE)；仓库原有 PHP 桥接代码仍按根目录许可证提供。
+此目录完整记录宿主源码修改。基线是上游 `41b86260dc9a60269526057eed8d915844ceb3a3`，修改后的本地宿主提交依次为 `b353044b3f2633a759405b9392e6d7dfcc3f2d68`、`f3cb1a81`（商户归属校验）。补丁适用范围、SHA-256 和所有补丁的校验值与逐文件修改清单见 [manifest.json](manifest.json)。宿主补丁遵循原项目 GPL-3.0，见 [LICENSE](LICENSE)；仓库原有 PHP 桥接代码仍按根目录许可证提供。
 
 安装后，“支付渠道 → 新增 → 渠道类型”可以直接选择 **PolyPay**。不需要易支付渠道、不需要 PHP 桥接服务。不涉及数据库结构变更。必须重新构建宿主后端与内嵌前端；复制插件文件夹无法让已有二进制动态识别渠道。
 
@@ -13,7 +13,7 @@ cd /path/to/dujiao-next
 test -z "$(git status --porcelain)"
 test "$(git rev-parse HEAD)" = 41b86260dc9a60269526057eed8d915844ceb3a3
 git switch -c feat/polypay-native
-git am /path/to/dujiao-next-plugin/native/patches/0001-native-polypay.patch
+git am /path/to/dujiao-next-plugin/native/patches/*.patch
 ```
 
 `git am` 保留作者与完整改动；提交 SHA 会随提交元数据变化，以补丁和清单为审计依据。补丁冲突时先 `git am --abort`，分析版本差异后再移植。
@@ -74,10 +74,10 @@ Webhook 校验固定官方 HTTPS JWKS、原始请求体、商户、production �
 
 ## 回滚
 
-优先恢复上一运行镜像或二进制，保留现有数据库与上传卷；不要直接恢复旧数据库覆盖已经产生的新订单。先停用 PolyPay 渠道、查询并处理在途付款，再回退旧程序。源码可在确认干净后 `git revert <应用补丁产生的提交>`。旧版本不会识别原生 PolyPay 渠道，必须先停用该渠道；未完成付款需要保留可查单/处理能力。
+优先恢复上一运行镜像或二进制，保留现有数据库与上传卷；不要直接恢复旧数据库覆盖已经产生的新订单。先停用 PolyPay 渠道、查询并处理在途付款，再回退旧程序。源码可在确认干净后按逆序 `git revert <应用补丁产生的提交>`。旧版本不会识别原生 PolyPay 渠道，必须先停用该渠道；未完成付款需要保留可查单/处理能力。
 
 ## 验收记录
 
 2026-10-20：全量 Go vet/test、原生协议 race、管理端 28 项测试和 fullstack 构建、顾客端 62 项测试和构建通过。使用正式测试账号创建 USD 0.14 订单并查询、取消成功，最终为已取消，没有实际支付。真实付款、公网异步通知及真实商品发货尚未验收；不得据此声明已完成付款闭环。96 环境的后台渠道创建仍取决于站点负责人确认宿主声明。
 
-96 测试实例已部署 `dujiao-next:polypay-native-0.2.0`，宿主服务器源码提交 `caf0e02`（通过同一补丁应用产生，与本地提交补丁等价）。前后台 HTTP 正常，实际加载的管理端资源包含原生 PolyPay 配置，回调缺少必需渠道 ID 时返回 HTTP 400。部署前已保留旧镜像并备份现有 SQLite 数据库和配置；无数据库表结构/初始化 SQL 变更。服务器端覆盖文件为私有目录中的 `polypay-native.override.yml`，后续重启要继续带上此覆盖文件，避免被基础 compose 的旧镜像设置覆盖。
+96 测试实例已部署 `dujiao-next:polypay-native-0.2.0`，宿主服务器源码提交依次为 `caf0e02`、`0d5ff86`（通过同一补丁应用产生，与本地提交补丁等价）。前后台 HTTP 正常，实际加载的管理端资源包含原生 PolyPay 配置，回调缺少必需渠道 ID 时返回 HTTP 400。部署前已保留旧镜像并备份现有 SQLite 数据库和配置；无数据库表结构/初始化 SQL 变更。服务器端覆盖文件为私有目录中的 `polypay-native.override.yml`，后续重启要继续带上此覆盖文件，避免被基础 compose 的旧镜像设置覆盖。

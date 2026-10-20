@@ -1,0 +1,70 @@
+From f3cb1a81b974febcbbc8882147bc05a95d047eca Mon Sep 17 00:00:00 2001
+From: kiddo <kiddo@11.com>
+Date: Tue, 20 Oct 2026 15:01:01 -0400
+Subject: [PATCH] fix(payment): verify PolyPay API order merchant binding
+
+---
+ .../payment/infrastructure/gateway/polypay/client.go |  5 +++--
+ .../infrastructure/gateway/polypay/client_test.go    | 12 +++++++++++-
+ 2 files changed, 14 insertions(+), 3 deletions(-)
+
+diff --git a/internal/modules/payment/infrastructure/gateway/polypay/client.go b/internal/modules/payment/infrastructure/gateway/polypay/client.go
+index ae7fbda8..5533569e 100644
+--- a/internal/modules/payment/infrastructure/gateway/polypay/client.go
++++ b/internal/modules/payment/infrastructure/gateway/polypay/client.go
+@@ -41,6 +41,7 @@ func NewClient(client *http.Client, consume NonceConsumer) *Client {
+ 
+ // Order is an authenticated server order snapshot; fiat amounts are USD, never token quantities.
+ type Order struct {
++	MerchantID  string      `json:"mch_id"`
+ 	TradeID     string      `json:"trade_id"`
+ 	OrderNo     string      `json:"mch_order_id"`
+ 	Status      int         `json:"status"`
+@@ -113,7 +114,7 @@ func (c *Client) Checkout(ctx context.Context, cfg *Config, orderNo, amount, not
+ 	if err := c.request(ctx, cfg, "detail", map[string]string{"mch_order_id": orderNo}, &order); err != nil {
+ 		return "", nil, err
+ 	}
+-	if order.TradeID == "" || order.OrderNo != orderNo || order.Environment != "production" {
++	if order.TradeID == "" || order.OrderNo != orderNo || order.Environment != "production" || order.MerchantID != cfg.MerchantID {
+ 		return "", nil, paymentcontract.ErrGatewayResponseInvalid
+ 	}
+ 	return checkout.URL, &order, nil
+@@ -133,7 +134,7 @@ func (c *Client) Query(ctx context.Context, cfg *Config, trade string) (*Order,
+ 	if err := c.request(ctx, cfg, "detail", query, &order); err != nil {
+ 		return nil, err
+ 	}
+-	if order.TradeID == "" || (!byMerchant && order.TradeID != trade) || (byMerchant && order.OrderNo != merchantNo) || order.OrderNo == "" || order.Environment != "production" {
++	if order.TradeID == "" || (!byMerchant && order.TradeID != trade) || (byMerchant && order.OrderNo != merchantNo) || order.OrderNo == "" || order.Environment != "production" || order.MerchantID != cfg.MerchantID {
+ 		return nil, paymentcontract.ErrGatewayResponseInvalid
+ 	}
+ 	return &order, nil
+diff --git a/internal/modules/payment/infrastructure/gateway/polypay/client_test.go b/internal/modules/payment/infrastructure/gateway/polypay/client_test.go
+index e457558f..a9c09825 100644
+--- a/internal/modules/payment/infrastructure/gateway/polypay/client_test.go
++++ b/internal/modules/payment/infrastructure/gateway/polypay/client_test.go
+@@ -73,7 +73,7 @@ func TestCheckoutAndCancelRace(t *testing.T) {
+ 					}
+ 					io.WriteString(w, `{"code":0,"data":{"checkout_url":"https://pay.polypay.ai/test"}}`)
+ 				case "/api/v1/pay/order/detail":
+-					fmt.Fprintf(w, `{"code":0,"data":{"trade_id":"trade-test","mch_order_id":"DJP-test","status":%d,"fiat_amount":"1.40","environment":"production"}}`, status)
++					fmt.Fprintf(w, `{"code":0,"data":{"mch_id":"MCH-test","trade_id":"trade-test","mch_order_id":"DJP-test","status":%d,"fiat_amount":"1.40","environment":"production"}}`, status)
+ 				case "/api/v1/pay/order/cancel":
+ 					if input["trade_id"] != "trade-test" {
+ 						t.Error("cancel did not resolve actual trade ID")
+@@ -188,3 +188,13 @@ func TestHTTPRequiresExplicitSwitch(t *testing.T) {
+ 		t.Fatal("zero conversion accepted")
+ 	}
+ }
++
++// TestQueryRejectsAnotherMerchant prevents a configured key/merchant mismatch from authorizing fulfillment.
++func TestQueryRejectsAnotherMerchant(t *testing.T) {
++	client := fixtureClient(t, func(w http.ResponseWriter, r *http.Request) {
++		io.WriteString(w, `{"code":0,"data":{"mch_id":"MCH-other","trade_id":"trade-test","mch_order_id":"DJP-test","status":2,"fiat_amount":"1.40","environment":"production"}}`)
++	}, nil)
++	if _, err := client.Query(context.Background(), testConfig(), "trade-test"); err == nil {
++		t.Fatal("another merchant accepted")
++	}
++}
+-- 
+2.53.0
+

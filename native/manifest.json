@@ -3,7 +3,7 @@
   "version": "0.2.0-preview",
   "upstream": "https://github.com/dujiao-next/dujiao-next",
   "baseline": "41b86260dc9a60269526057eed8d915844ceb3a3",
-  "host_commit": "b353044b3f2633a759405b9392e6d7dfcc3f2d68",
+  "host_commit": "f3cb1a81b974febcbbc8882147bc05a95d047eca",
   "patch_sha256": "fda90f906574aceb3cf0b8eb415ac72720cb92f5f07c0ca4d6cc988080802acd",
   "license": "GPL-3.0 (host-source patch; see native/LICENSE)",
   "database_schema_changes": false,
@@ -44,17 +44,37 @@
     "user": "pnpm run test (62 tests); pnpm run build passed",
     "live_protocol": "2026-10-20 production API create/detail/cancel passed; USD 0.14 order cancelled, no payment",
     "real_payment_and_public_webhook": "not performed",
-    "host_admin_channel_creation": "pending existing compliance acknowledgment"
+    "host_admin_channel_creation": "pending existing compliance acknowledgment",
+    "merchant_binding": "Production API response merchant ID must match configured merchant; verified create/detail/cancel again without payment",
+    "patch_reproduction": "Both ordered patches recreate the exact final committed host tree"
   },
   "lan_deployment": {
     "date": "2026-10-20",
-    "host_commit": "caf0e02",
+    "host_commit": "0d5ff86",
     "image": "dujiao-next:polypay-native-0.2.0",
-    "binary_sha256": "40a058a33453ce3a0f4963d41fe65b97be63f36da5420eaa0cae008003c326a5",
+    "binary_sha256": "db54a1e2c1e53e4883d880ebd0029ae655c877f22d30d4765d2b2b9643abdec2",
     "admin_page_http": 200,
     "native_admin_assets": true,
     "callback_without_required_channel_http": 400,
     "frontend_secret_scan": "passed",
-    "channel_creation": "pending site-owner compliance acknowledgment"
-  }
+    "channel_creation": "pending site-owner compliance acknowledgment",
+    "host_commits": [
+      "caf0e02",
+      "0d5ff86"
+    ]
+  },
+  "host_commits": [
+    "b353044b3f2633a759405b9392e6d7dfcc3f2d68",
+    "f3cb1a81b974febcbbc8882147bc05a95d047eca"
+  ],
+  "patches": [
+    {
+      "file": "patches/0001-native-polypay.patch",
+      "sha256": "fda90f906574aceb3cf0b8eb415ac72720cb92f5f07c0ca4d6cc988080802acd"
+    },
+    {
+      "file": "patches/0002-verify-merchant-binding.patch",
+      "sha256": "08ec76b0919d3150548f3d1b883242d03aab2dd11c1167160d93305802b69b5f"
+    }
+  ]
 }

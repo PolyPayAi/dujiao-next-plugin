@@ -38,10 +38,11 @@ jobs:
           plugin = pathlib.Path('plugin/native')
           doc = json.loads((plugin / 'manifest.json').read_text())
           assert subprocess.check_output(['git', '-C', 'host', 'rev-parse', 'HEAD'], text=True).strip() == doc['baseline']
-          patch = plugin / 'patches/0001-native-polypay.patch'
-          assert hashlib.sha256(patch.read_bytes()).hexdigest() == doc['patch_sha256']
-          subprocess.run(['git', '-C', 'host', 'apply', '--check', str(patch.resolve())], check=True)
-          subprocess.run(['git', '-C', 'host', 'apply', str(patch.resolve())], check=True)
+          for entry in doc['patches']:
+              patch = plugin / entry['file']
+              assert hashlib.sha256(patch.read_bytes()).hexdigest() == entry['sha256']
+              subprocess.run(['git', '-C', 'host', 'apply', '--check', str(patch.resolve())], check=True)
+              subprocess.run(['git', '-C', 'host', 'apply', str(patch.resolve())], check=True)
           PYCODE
       - uses: actions/setup-go@v5
         with:
