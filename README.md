@@ -1,5 +1,29 @@
 # PolyPay for Dujiao-Next
 
+## AI-assisted setup (Skill)
+
+Use the bundled [polypay-dujiao-next skill](skills/polypay-dujiao-next/SKILL.md) with Codex to install, configure, upgrade, or troubleshoot this integration. It uses the native host-source patches and records host changes.
+
+Install with Codex’s built-in skill installer:
+
+```bash
+python3 "${CODEX_HOME:-$HOME/.codex}/skills/.system/skill-installer/scripts/install-skill-from-github.py" \
+  --repo PolyPayAi/dujiao-next-plugin \
+  --ref feat/standalone-payments \
+  --path skills/polypay-dujiao-next
+```
+
+The skill is currently on `feat/standalone-payments`; keep the `--ref` argument. If already installed, review the existing skill before replacing it. On your next Codex turn, invoke it with the actual local paths:
+
+```text
+$polypay-dujiao-next
+Integrate the native PolyPay channel into /path/to/dujiao-next. Plugin source is at /path/to/dujiao-next-plugin. Read merchant credentials from the private file I specify. Check version compatibility, record host patches, build, and verify checkout creation and cancellation without paying.
+```
+
+For another AI tool, ask it to read the linked `SKILL.md` first. The skill is operational guidance; it does not install the payment integration merely by being added to Codex.
+
+## Integration overview
+
 > **Native PolyPay integration (0.2.1 preview):** use the host-source patch in [native/](native/README.zh.md) to add a real PolyPay provider to the admin dropdown. Rebuild Dujiao-Next after applying the patch. Baseline, complete changed-file list, SHA-256, tests and rollback instructions are recorded in `native/manifest.json`. This patch is GPL-3.0 under the host license. The EPay bridge documented below is the older optional integration and is not needed for native mode.
 
 
