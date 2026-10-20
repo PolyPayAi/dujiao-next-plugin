@@ -17,7 +17,7 @@ class Bridge
         if (strlen($config['epay_key']) < 32 || $config['environment'] !== 'production') {
             throw new \RuntimeException('Invalid bridge key or environment');
         }
-        foreach (['base_url', 'notify_url', 'return_url'] as $key) Support::url($config[$key]);
+        foreach (['base_url', 'notify_url', 'return_url'] as $key) HostUrl::validate($config[$key], $config['force_https'] ?? 1);
         $this->config = $config;
         $this->store = $store;
         $this->api = $api;
@@ -50,7 +50,7 @@ class Bridge
         if (!preg_match('/^[A-Za-z0-9_-]{1,64}$/D', $id)) throw new \InvalidArgumentException('Invalid order identifier', 400);
         if (!in_array($input['type'] ?? '', ['alipay', 'wxpay', 'qqpay'], true)) throw new \InvalidArgumentException('Unsupported EPay transport type', 400);
         if (($input['notify_url'] ?? '') !== $this->config['notify_url']) throw new \InvalidArgumentException('Notification URL mismatch', 400);
-        $return = Support::url($input['return_url'] ?? '');
+        $return = HostUrl::validate($input['return_url'] ?? '', $this->config['force_https'] ?? 1);
         // Dujiao-Next appends order tracking query parameters to the configured return URL.
         if (explode('?', $return, 2)[0] !== $this->config['return_url']) throw new \InvalidArgumentException('Return URL mismatch', 400);
         $amount = Support::amount($input['money'] ?? '');

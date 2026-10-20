@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/vendor/polypay/autoload.php';
 require_once __DIR__ . '/src/Support.php';
+require_once __DIR__ . '/src/HostUrl.php';
 require_once __DIR__ . '/src/Bridge.php';
 
 /** Load a private configuration file and build trusted transport dependencies. */

@@ -17,7 +17,7 @@
 
 仓库附带 `Dockerfile` 和 `deploy/compose.yml`。设置 `POLYPAY_BRIDGE_LISTEN_IP`（例如 `127.0.0.1`）及私有配置路径 `POLYPAY_BRIDGE_CONFIG_FILE` 后，执行 `docker compose -f deploy/compose.yml up -d --build`。
 
-私有配置中的 `storage_dir` 填 `/var/lib/polypay-dujiao-next`；映射存储由持久化数据卷保存。配置文件需允许容器 PHP 用户（UID 33）读取，同时限制父目录权限。18083 端口提供 HTTP，由 HTTPS 反向代理转发，配置中的公网地址仍必须使用 HTTPS。实际部署前先明确公网域名和 正式商户。
+私有配置中的 `storage_dir` 填 `/var/lib/polypay-dujiao-next`；映射存储由持久化数据卷保存。配置文件需允许容器 PHP 用户（UID 33）读取，同时限制父目录权限。18083 端口提供 HTTP，由 HTTPS 反向代理转发，配置中的公网地址默认要求 HTTPS。内网测试可设置 `force_https=0`，使用 IP 和 HTTP 地址；正式部署默认 `force_https=1`。PolyPay 收银台和商户 API 继续使用 HTTPS，公网回调无法直接访问内网 IP，因而内网测试不能验证自动发货。
 
 ## 商城后台
 
@@ -45,4 +45,4 @@ CLI 同样需要 `POLYPAY_BRIDGE_CONFIG`。取消前后都会查单；若付款�
 
 ## 验证与打包
 
-执行 `php tests/run.php` 和 `python3 scripts/package.py`。正式使用前，先验证下单和取消，不进行付款；经明确授权的小额真实付款后，再验证注册用户、游客购买、余额充值、发货、重复/非法回调、金额校验、投递失败重试、过期及取消；当前测试不代表真实联调通过。
+执行 `php tests/run.php`、`php tests/http-config.php` 和 `python3 scripts/package.py`。正式使用前，先验证下单和取消，不进行付款；经明确授权的小额真实付款后，再验证注册用户、游客购买、余额充值、发货、重复/非法回调、金额校验、投递失败重试、过期及取消；当前测试不代表真实联调通过。

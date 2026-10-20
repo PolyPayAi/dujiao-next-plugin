@@ -7,6 +7,7 @@ return [
     'api_url' => 'https://api.polypay.ai',
     'merchant_id' => '',
     'environment' => 'production',
+    'force_https' => 1, // Set 0 only for explicit HTTP testing.
     'base_url' => 'https://bridge.example.com',
     'notify_url' => 'https://shop.example.com/api/v1/payments/callback',
     'return_url' => 'https://shop.example.com/pay',

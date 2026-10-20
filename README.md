@@ -88,3 +88,5 @@ Installation does not call PolyPay plugin activation: the current backend plugin
 ## SDK provenance
 
 `vendor/polypay` is the unmodified official PHP SDK snapshot `d4f152b85bdd7c7ac210ded8a13eeecd8e3a9e09` from https://github.com/PolyPayAi/php-sdk, including its MIT license. Webhook v2 uses this verifier; HTTP order operations use canonical `/api/v1/pay/order/{checkout,detail,cancel}` endpoints because the snapshot API client uses legacy aliases and its facade discards the returned order context. Shared primitives in `src/Support.php` are also vendored by the independent ACG-Faka adapter; update both copies together.
+
+HTTP testing is available with `force_https=0`; HTTPS remains the default (`1`). This applies to bridge and storefront URLs only; PolyPay API and checkout stay HTTPS. The callback and return targets remain pinned. Public webhook delivery cannot reach a LAN IP, so LAN tests do not verify automatic fulfillment. Run `php tests/http-config.php` to verify this configuration.
