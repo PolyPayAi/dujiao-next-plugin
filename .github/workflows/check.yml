@@ -1,0 +1,21 @@
+name: Check plugin
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: curl, bcmath, sodium
+          coverage: none
+      - run: find . -name '*.php' -not -path './.git/*' -print0 | xargs -0 -n 1 php -l
+      - run: php tests/run.php
+      - run: python3 scripts/package.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: plugin-install-archive
+          path: dist/*.zip
