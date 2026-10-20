@@ -40,6 +40,18 @@ Create a payment channel with:
 
 `alipay` is only the existing host's EPay transport identifier. It does not enable Alipay: payment methods are selected on PolyPay Hosted Checkout. Do not enable EPay QR mode; this bridge implements `/submit.php`, not `/mapi.php`. Avoid configuring another currency conversion in Dujiao-Next unless `usd_rate` intentionally accounts for that conversion.
 
+## Docker deployment
+
+`Dockerfile` bundles the required PHP extensions and exposes only `public/`. A configuration file remains outside the image and repository. For a single-instance deployment:
+
+```bash
+export POLYPAY_BRIDGE_LISTEN_IP=127.0.0.1
+export POLYPAY_BRIDGE_CONFIG_FILE=/etc/polypay-dujiao-next.php
+docker compose -f deploy/compose.yml up -d --build
+```
+
+The private file must be readable by the container PHP worker (UID 33); use a restricted parent directory and an appropriate group/read permission. Set its `storage_dir` to `/var/lib/polypay-dujiao-next`. Port 18083 serves HTTP behind your HTTPS reverse proxy. Use the public HTTPS domain in `base_url`, never an internal Docker address. The database-free payment mapping persists in `bridge-data`.
+
 ## Payment lifecycle
 
 The host signs an EPay redirect; the bridge validates the signature and pinned URLs, creates the PolyPay checkout through the canonical merchant API, and looks up its trade ID. PolyPay v2 Webhooks are verified using the bundled official SDK, the merchant/environment audience and replay protection. Only status 2 (paid) and 7 (admin-marked paid) generate a signed host callback. Status 5 is not accepted as an ordinary paid order. Browser returns never mark payment successful.

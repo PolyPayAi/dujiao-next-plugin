@@ -1,0 +1,11 @@
+*
+!Dockerfile
+!bootstrap.php
+!src/
+!src/**
+!public/
+!public/**
+!vendor/
+!vendor/**
+!bin/
+!bin/**

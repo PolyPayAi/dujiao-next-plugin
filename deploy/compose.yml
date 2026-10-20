@@ -1,0 +1,18 @@
+services:
+  bridge:
+    build:
+      context: ..
+    image: polypay-dujiao-next:0.1.0
+    restart: unless-stopped
+    ports:
+      - "${POLYPAY_BRIDGE_LISTEN_IP:?Set listen IP}:18083:80"
+    volumes:
+      - bridge-data:/var/lib/polypay-dujiao-next
+    secrets:
+      - source: bridge-config
+        target: bridge.php
+secrets:
+  bridge-config:
+    file: ${POLYPAY_BRIDGE_CONFIG_FILE:?Set private configuration path}
+volumes:
+  bridge-data:

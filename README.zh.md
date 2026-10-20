@@ -13,6 +13,12 @@
 5. 填写 Sandbox API Key、商户 ID、`environment=sandbox`、桥接 HTTPS 地址及商城回调/返回地址。
 6. `usd_rate` 表示商城提交金额每一单位折合多少 USD。例如 `0.14` 表示 10 元换算为 1.40 USD；商城提交 USD 时填 `1`。下单前保存汇率快照，配置变更不会影响旧订单。
 
+## Docker 部署
+
+仓库附带 `Dockerfile` 和 `deploy/compose.yml`。设置 `POLYPAY_BRIDGE_LISTEN_IP`（例如 `127.0.0.1`）及私有配置路径 `POLYPAY_BRIDGE_CONFIG_FILE` 后，执行 `docker compose -f deploy/compose.yml up -d --build`。
+
+私有配置中的 `storage_dir` 填 `/var/lib/polypay-dujiao-next`；映射存储由持久化数据卷保存。配置文件需允许容器 PHP 用户（UID 33）读取，同时限制父目录权限。18083 端口提供 HTTP，由 HTTPS 反向代理转发，配置中的公网地址仍必须使用 HTTPS。实际部署前先明确公网域名和 Sandbox 商户。
+
 ## 商城后台
 
 新增支付渠道：提供方选择「易支付」，版本 `v1`，交互方式 `redirect`，网关地址填桥接域名；商户号与商户密钥分别填 `pid` 和 `epay_key`。签名为 `MD5`，通道类型选择 `alipay`，显示名称设为 `PolyPay`。
