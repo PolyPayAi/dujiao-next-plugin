@@ -56,7 +56,8 @@ class Bridge
         $amount = Support::amount($input['money'] ?? '');
         return $this->store->locked($id, function (array $record) use ($id, $input, $return, $amount): array {
             if ($record) {
-                if ($record['amount'] !== $amount || $record['return_url'] !== $return || $record['type'] !== $input['type']) {
+                if ($record['amount'] !== $amount || $record['return_url'] !== $return || $record['type'] !== $input['type']
+                    || $record['merchant_id'] !== $this->config['merchant_id'] || $record['environment'] !== $this->config['environment']) {
                     throw new \UnexpectedValueException('Order parameters changed; create a new payment attempt', 409);
                 }
                 if (in_array($record['state'], ['cancelled', 'expired', 'paid'], true)) throw new \UnexpectedValueException('Payment attempt is terminal', 409);
@@ -64,7 +65,7 @@ class Bridge
             } else {
                 $record = ['host_order' => $id, 'mch_order_id' => 'DJ' . substr(hash('sha256', $this->config['pid'] . '|' . $id), 0, 30),
                     'amount' => $amount, 'usd_amount' => Support::usd($amount, $this->config['usd_rate']), 'rate' => $this->config['usd_rate'],
-                    'environment' => $this->config['environment'], 'return_url' => $return, 'type' => $input['type'],
+                    'merchant_id' => $this->config['merchant_id'], 'environment' => $this->config['environment'], 'return_url' => $return, 'type' => $input['type'],
                     'state' => 'creating', 'notified' => false];
                 // Persist pricing before the remote request so an ambiguous retry cannot change it.
                 $this->store->save($id, $record);
@@ -87,7 +88,8 @@ class Bridge
     public function paid(string $id, array $event): void
     {
         $this->store->locked($id, function (array $record) use ($id, $event): void {
-            if (!$record || empty($record['trade_id'])) throw new \UnexpectedValueException('Unknown payment attempt', 409);
+            if (!$record || empty($record['trade_id']) || $record['merchant_id'] !== $this->config['merchant_id']
+                || $record['environment'] !== $this->config['environment']) throw new \UnexpectedValueException('Unknown payment attempt', 409);
             Support::paid($event, $record);
             $record['state'] = 'paid';
             $record['event_id'] = $event['event_id'];
@@ -100,7 +102,8 @@ class Bridge
     public function retry(string $id): void
     {
         $this->store->locked($id, function (array $record) use ($id): void {
-            if (($record['state'] ?? '') !== 'paid') throw new \RuntimeException('No accepted paid event');
+            if (($record['state'] ?? '') !== 'paid' || $record['merchant_id'] !== $this->config['merchant_id']
+                || $record['environment'] !== $this->config['environment']) throw new \RuntimeException('No accepted paid event');
             if (!$record['notified']) $this->deliver($id, $record);
         });
     }
@@ -121,7 +124,12 @@ class Bridge
     public function maintain(string $id, bool $cancel): array
     {
         return $this->store->locked($id, function (array $record) use ($id, $cancel): array {
-            if (empty($record['trade_id'])) throw new \RuntimeException('Unknown payment attempt');
+            if (empty($record['trade_id']) || $record['merchant_id'] !== $this->config['merchant_id']
+                || $record['environment'] !== $this->config['environment']) throw new \RuntimeException('Unknown payment attempt');
+            if ($record['state'] === 'paid') {
+                if (!$record['notified']) $this->deliver($id, $record);
+                return ['state' => 'paid'];
+            }
             $remote = ($this->api)('detail', ['trade_id' => $record['trade_id']]);
             if (in_array($remote['status'] ?? null, [2, 7], true)) {
                 $event = $remote + ['order_no' => $record['mch_order_id'], 'environment' => $record['environment'], 'event_id' => 'query-' . $record['trade_id']];
