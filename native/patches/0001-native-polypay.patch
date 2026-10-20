@@ -1,0 +1,1667 @@
+From b353044b3f2633a759405b9392e6d7dfcc3f2d68 Mon Sep 17 00:00:00 2001
+From: kiddo <kiddo@11.com>
+Date: Tue, 20 Oct 2026 14:52:41 -0400
+Subject: [PATCH] feat(payment): add native PolyPay hosted checkout provider
+
+---
+ frontend/admin/src/i18n/index.ts              |  24 +++
+ .../admin/src/views/admin/PaymentChannels.vue |   3 +
+ .../admin/components/PaymentChannelModal.vue  |  54 ++++-
+ frontend/user/src/composables/usePayment.ts   |   4 +-
+ internal/app/container/bootstrap.go           |   2 +
+ .../app/container/services_integration.go     |   1 +
+ internal/bootstrap/payment/admin_callbacks.go |   6 +
+ internal/constants/constants.go               |   1 +
+ .../order/application/order_service.go        |   6 +
+ .../order/application/order_service_child.go  |   5 +
+ .../order/contract/payment_cancellation.go    |   6 +
+ .../application/payment_service_capture.go    |  69 ++++++-
+ .../application/payment_service_create.go     |  21 ++
+ .../application/payment_service_provider.go   |  38 +++-
+ .../application/payment_service_recharge.go   |  12 ++
+ .../application/payment_service_webhook.go    |   9 +
+ .../payment_service_webhook_test.go           | 106 ++++++++++
+ internal/modules/payment/contract/gateway.go  |  11 +
+ .../gateway/adapters/polypay/adapter.go       | 174 ++++++++++++++++
+ .../gateway/adapters/polypay/adapter_test.go  |  34 ++++
+ .../infrastructure/gateway/polypay/client.go  | 162 +++++++++++++++
+ .../gateway/polypay/client_test.go            | 190 ++++++++++++++++++
+ .../infrastructure/gateway/polypay/config.go  |  58 ++++++
+ .../infrastructure/gateway/polypay/webhook.go | 134 ++++++++++++
+ .../transport/http/admin_channel_handler.go   |   1 +
+ .../modules/payment/transport/http/routes.go  |   1 +
+ .../payment/transport/http/webhook_handler.go |  22 ++
+ .../transport/http/webhook_handler_test.go    |  34 +++-
+ 28 files changed, 1181 insertions(+), 7 deletions(-)
+ create mode 100644 internal/modules/order/contract/payment_cancellation.go
+ create mode 100644 internal/modules/payment/infrastructure/gateway/adapters/polypay/adapter.go
+ create mode 100644 internal/modules/payment/infrastructure/gateway/adapters/polypay/adapter_test.go
+ create mode 100644 internal/modules/payment/infrastructure/gateway/polypay/client.go
+ create mode 100644 internal/modules/payment/infrastructure/gateway/polypay/client_test.go
+ create mode 100644 internal/modules/payment/infrastructure/gateway/polypay/config.go
+ create mode 100644 internal/modules/payment/infrastructure/gateway/polypay/webhook.go
+
+diff --git a/frontend/admin/src/i18n/index.ts b/frontend/admin/src/i18n/index.ts
+index cfcc57d5..d8e24d1b 100644
+--- a/frontend/admin/src/i18n/index.ts
++++ b/frontend/admin/src/i18n/index.ts
+@@ -1190,6 +1190,7 @@ const messages = {
+         filterChannelAll: '支付方式',
+         providerOfficialCertified: '官方认证',
+         providerTypes: {
++          polypay: 'PolyPay',
+           official: '官方',
+           epay: '易支付',
+           bepusdt: 'BEpusdt',
+@@ -1287,6 +1288,13 @@ const messages = {
+           memberLevels: '会员等级限制 (选填)',
+           memberLevelsPlaceholder: '请选择允许的会员等级 (留空为不限制)',
+           sortOrder: '排序权重',
++          polypayMerchantId: '商户 ID',
++          polypayApiKey: 'API Key',
++          polypayUsdRate: '每 1 单位店铺币种兑换的 USD',
++          polypayNotifyUrl: '异步通知地址',
++          polypayReturnUrl: '支付返回地址',
++          polypayForceHttps: '强制 HTTPS',
++          polypayHint: 'PolyPay 使用正式环境，按 USD 创建订单。关闭 HTTPS 可使用内网 HTTP；内网地址无法接收公网通知，订单状态由服务器主动查询。',
+           epaySection: '易支付配置',
+           epayVersion: '版本',
+           gatewayUrl: '支付网关',
+@@ -5717,6 +5725,7 @@ const messages = {
+         filterChannelAll: '支付方式',
+         providerOfficialCertified: '官方認證',
+         providerTypes: {
++          polypay: 'PolyPay',
+           official: '官方',
+           epay: '易支付',
+           bepusdt: 'BEpusdt',
+@@ -5814,6 +5823,13 @@ const messages = {
+           memberLevels: '會員等級限制 (選填)',
+           memberLevelsPlaceholder: '請選擇允許的會員等級 (留空為不限制)',
+           sortOrder: '排序權重',
++          polypayMerchantId: '商戶 ID',
++          polypayApiKey: 'API Key',
++          polypayUsdRate: '每 1 單位商店幣別兌換的 USD',
++          polypayNotifyUrl: '非同步通知網址',
++          polypayReturnUrl: '付款返回網址',
++          polypayForceHttps: '強制 HTTPS',
++          polypayHint: 'PolyPay 使用正式環境，按 USD 建立訂單。關閉 HTTPS 可使用內網 HTTP；內網位址無法接收公網通知，訂單狀態由伺服器主動查詢。',
+           epaySection: '易支付配置',
+           epayVersion: '版本',
+           gatewayUrl: '支付網關',
+@@ -10244,6 +10260,7 @@ const messages = {
+         filterChannelAll: 'Channel',
+         providerOfficialCertified: 'Certified',
+         providerTypes: {
++          polypay: 'PolyPay',
+           official: 'Official',
+           epay: 'Epay',
+           bepusdt: 'BEpusdt',
+@@ -10341,6 +10358,13 @@ const messages = {
+           memberLevels: 'Member Levels Limit (Optional)',
+           memberLevelsPlaceholder: 'Please select the allowed member level (Leave blank means no limit)',
+           sortOrder: 'Sort Order',
++          polypayMerchantId: 'Merchant ID',
++          polypayApiKey: 'API Key',
++          polypayUsdRate: 'USD per 1 unit of store currency',
++          polypayNotifyUrl: 'Webhook URL',
++          polypayReturnUrl: 'Return URL',
++          polypayForceHttps: 'Require HTTPS',
++          polypayHint: 'PolyPay uses production and creates USD orders. Disable HTTPS to allow LAN HTTP. Private addresses cannot receive public webhooks; the server queries payment status.',
+           epaySection: 'Epay Config',
+           epayVersion: 'Version',
+           gatewayUrl: 'Gateway URL',
+diff --git a/frontend/admin/src/views/admin/PaymentChannels.vue b/frontend/admin/src/views/admin/PaymentChannels.vue
+index 5f7b7e5d..a00e989d 100644
+--- a/frontend/admin/src/views/admin/PaymentChannels.vue
++++ b/frontend/admin/src/views/admin/PaymentChannels.vue
+@@ -113,6 +113,7 @@ const changePageSize = (size: number) => {
+ 
+ const providerTypeLabel = (value?: string) => {
+   const map: Record<string, string> = {
++    polypay: 'PolyPay',
+     official: t('admin.paymentChannels.providerTypes.official'),
+     epay: t('admin.paymentChannels.providerTypes.epay'),
+     bepusdt: t('admin.paymentChannels.providerTypes.bepusdt'),
+@@ -126,6 +127,7 @@ const providerTypeLabel = (value?: string) => {
+ 
+ const channelTypeLabel = (value?: string) => {
+   const map: Record<string, string> = {
++    polypay: 'PolyPay',
+     wechat: t('admin.paymentChannels.channelTypes.wechat'),
+     alipay: t('admin.paymentChannels.channelTypes.alipay'),
+     qqpay: t('admin.paymentChannels.channelTypes.qqpay'),
+@@ -335,6 +337,7 @@ watch(
+                   </span>
+                 </span>
+               </SelectItem>
++              <SelectItem value="polypay">PolyPay</SelectItem>
+               <SelectItem value="epay">{{ t('admin.paymentChannels.providerTypes.epay') }}</SelectItem>
+               <SelectItem value="bepusdt">{{ t('admin.paymentChannels.providerTypes.bepusdt') }}</SelectItem>
+               <SelectItem value="epusdt">{{ t('admin.paymentChannels.providerTypes.epusdt') }}</SelectItem>
+diff --git a/frontend/admin/src/views/admin/components/PaymentChannelModal.vue b/frontend/admin/src/views/admin/components/PaymentChannelModal.vue
+index fa24986f..7420d2af 100644
+--- a/frontend/admin/src/views/admin/components/PaymentChannelModal.vue
++++ b/frontend/admin/src/views/admin/components/PaymentChannelModal.vue
+@@ -65,6 +65,9 @@ onMounted(async () => {
+   }
+ })
+ 
++// Native PolyPay settings are sent only through the authenticated admin API.
++const polypayConfig = reactive({ api_key: '', merchant_id: '', usd_rate: '', notify_url: '', return_url: '', force_https: true })
++
+ const epayConfig = reactive({
+   epay_version: 'v2',
+   gateway_url: '',
+@@ -241,6 +244,7 @@ const memberLevelOptions = computed(() =>
+ )
+ 
+ const formChannelOptions = computed(() => {
++  if (form.provider_type === 'polypay') return [{ value: 'polypay', label: 'admin.paymentChannels.providerTypes.polypay' }]
+   if (form.provider_type === 'epay') {
+     return epayChannelOptions
+   }
+@@ -257,6 +261,7 @@ const formChannelOptions = computed(() => {
+ })
+ 
+ const interactionModeOptions = computed(() => {
++  if (form.provider_type === 'polypay') return [{ value: 'redirect', label: 'admin.paymentChannels.interactionModes.redirect' }]
+   if (form.provider_type === 'epay') {
+     return [
+       { value: 'qr', label: 'admin.paymentChannels.interactionModes.qr' },
+@@ -462,6 +467,7 @@ const resetDujiaoPayConfig = () => {
+ }
+ 
+ const resetAllConfigs = () => {
++  Object.assign(polypayConfig, { api_key: '', merchant_id: '', usd_rate: '', notify_url: `${window.location.origin}/api/v1/payments/webhook/polypay`, return_url: `${window.location.origin}/pay`, force_https: true })
+   resetEpayConfig()
+   resetPaypalConfig()
+   resetStripeConfig()
+@@ -864,7 +870,10 @@ watch(
+     if (applyingChannelData.value) {
+       return
+     }
+-    if (value === 'epay') {
++    if (value === 'polypay') {
++      form.channel_type = 'polypay'
++      form.interaction_mode = 'redirect'
++    } else if (value === 'epay') {
+       const allowed = epayChannelOptions.map((option) => option.value)
+       if (!allowed.includes(form.channel_type)) {
+         form.channel_type = allowed[0] || 'wechat'
+@@ -1047,6 +1056,14 @@ watch(
+         form.is_active = !!channel.is_active
+         form.sort_order = channel.sort_order || 0
+         if (channel.config_json && typeof channel.config_json === 'object') {
++          Object.assign(polypayConfig, {
++            api_key: String(channel.config_json.api_key || ''),
++            merchant_id: String(channel.config_json.merchant_id || ''),
++            usd_rate: String(channel.config_json.usd_rate || ''),
++            notify_url: String(channel.config_json.notify_url || ''),
++            return_url: String(channel.config_json.return_url || ''),
++            force_https: channel.config_json.force_https !== false,
++          })
+           applyEpayConfig(channel.config_json)
+           applyPaypalConfig(channel.config_json)
+           applyStripeConfig(channel.config_json)
+@@ -1114,7 +1131,9 @@ const handleSubmit = async () => {
+     }
+   }
+ 
+-  if (form.provider_type === 'epay') {
++  if (form.provider_type === 'polypay') {
++    configJson = { ...configJson, ...polypayConfig }
++  } else if (form.provider_type === 'epay') {
+     if (epayConfig.epay_version === 'v1') {
+       delete configJson.private_key
+       delete configJson.platform_public_key
+@@ -1275,6 +1294,7 @@ const closeModal = () => {
+                     </span>
+                   </span>
+                 </SelectItem>
++                <SelectItem value="polypay">{{ t('admin.paymentChannels.providerTypes.polypay') }}</SelectItem>
+                 <SelectItem value="epay">{{ t('admin.paymentChannels.providerTypes.epay') }}</SelectItem>
+                 <SelectItem value="bepusdt">{{ t('admin.paymentChannels.providerTypes.bepusdt') }}</SelectItem>
+                 <SelectItem value="epusdt">{{ t('admin.paymentChannels.providerTypes.epusdt') }}</SelectItem>
+@@ -1364,6 +1384,36 @@ const closeModal = () => {
+           </div>
+         </div>
+ 
++        <div v-if="form.provider_type === 'polypay'" class="min-w-0 space-y-4">
++          <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
++            <div class="min-w-0 space-y-1.5">
++              <Label for="polypay-merchant_id">{{ t('admin.paymentChannels.modal.polypayMerchantId') }}</Label>
++              <Input id="polypay-merchant_id" v-model="polypayConfig.merchant_id" type="text" autocomplete="off" />
++            </div>
++            <div class="min-w-0 space-y-1.5">
++              <Label for="polypay-api_key">{{ t('admin.paymentChannels.modal.polypayApiKey') }}</Label>
++              <Input id="polypay-api_key" v-model="polypayConfig.api_key" type="password" autocomplete="off" />
++            </div>
++            <div class="min-w-0 space-y-1.5">
++              <Label for="polypay-usd_rate">{{ t('admin.paymentChannels.modal.polypayUsdRate') }}</Label>
++              <Input id="polypay-usd_rate" v-model="polypayConfig.usd_rate" type="text" autocomplete="off" />
++            </div>
++            <div class="min-w-0 space-y-1.5">
++              <Label for="polypay-notify_url">{{ t('admin.paymentChannels.modal.polypayNotifyUrl') }}</Label>
++              <Input id="polypay-notify_url" v-model="polypayConfig.notify_url" type="url" autocomplete="off" />
++            </div>
++            <div class="min-w-0 space-y-1.5">
++              <Label for="polypay-return_url">{{ t('admin.paymentChannels.modal.polypayReturnUrl') }}</Label>
++              <Input id="polypay-return_url" v-model="polypayConfig.return_url" type="url" autocomplete="off" />
++            </div>
++            <div class="flex items-center justify-between gap-4">
++              <Label for="polypay-force-https">{{ t('admin.paymentChannels.modal.polypayForceHttps') }}</Label>
++              <Switch id="polypay-force-https" v-model="polypayConfig.force_https" />
++            </div>
++          </div>
++          <p class="text-xs text-muted-foreground">{{ t('admin.paymentChannels.modal.polypayHint') }}</p>
++        </div>
++
+         <div v-if="form.provider_type === 'epay'" class="min-w-0 rounded-xl border border-border bg-muted/20 p-4 overflow-hidden">
+           <div class="text-sm font-semibold text-foreground mb-3">{{ t('admin.paymentChannels.modal.epaySection') }}</div>
+           <div class="grid grid-cols-1 gap-4 md:grid-cols-2 [&>*]:min-w-0">
+diff --git a/frontend/user/src/composables/usePayment.ts b/frontend/user/src/composables/usePayment.ts
+index 1230492e..af87e301 100644
+--- a/frontend/user/src/composables/usePayment.ts
++++ b/frontend/user/src/composables/usePayment.ts
+@@ -104,7 +104,7 @@ export function usePayment() {
+     return value === '1' || value === 'true' || value === 'yes'
+   }
+ 
+-  const paymentReturnMarkers = ['epay_return', 'alipay_return', 'wechat_return', 'epusdt_return', 'bepusdt_return', 'tokenpay_return', 'okpay_return', 'pp_return', 'stripe_return']
++  const paymentReturnMarkers = ['polypay_return', 'epay_return', 'alipay_return', 'wechat_return', 'epusdt_return', 'bepusdt_return', 'tokenpay_return', 'okpay_return', 'pp_return', 'stripe_return']
+   const rechargeBizType = computed(() => readRouteQueryValue('biz_type').toLowerCase())
+   const rechargeNoQuery = computed(() => {
+     const rechargeNo = readRouteQueryValue('recharge_no')
+@@ -661,7 +661,7 @@ export function usePayment() {
+   const shouldCaptureCurrentPayment = () => {
+     if (!currentPaymentID()) return false
+     if (!order.value || order.value.status !== 'pending_payment') return false
+-    return paymentProviderType.value === 'official' && paymentChannelType.value === 'wechat'
++    return paymentProviderType.value === 'polypay' || (paymentProviderType.value === 'official' && paymentChannelType.value === 'wechat')
+   }
+ 
+   const captureCurrentPayment = async (options?: { silent?: boolean }) => {
+diff --git a/internal/app/container/bootstrap.go b/internal/app/container/bootstrap.go
+index 516c8730..7567798d 100644
+--- a/internal/app/container/bootstrap.go
++++ b/internal/app/container/bootstrap.go
+@@ -14,6 +14,7 @@ import (
+ 	epusdtadapter "github.com/dujiao-next/internal/modules/payment/infrastructure/gateway/adapters/epusdt"
+ 	okpayadapter "github.com/dujiao-next/internal/modules/payment/infrastructure/gateway/adapters/okpay"
+ 	paypaladapter "github.com/dujiao-next/internal/modules/payment/infrastructure/gateway/adapters/paypal"
++	polypayadapter "github.com/dujiao-next/internal/modules/payment/infrastructure/gateway/adapters/polypay"
+ 	stripeadapter "github.com/dujiao-next/internal/modules/payment/infrastructure/gateway/adapters/stripe"
+ 	tokenpayadapter "github.com/dujiao-next/internal/modules/payment/infrastructure/gateway/adapters/tokenpay"
+ 	wechatpayadapter "github.com/dujiao-next/internal/modules/payment/infrastructure/gateway/adapters/wechatpay"
+@@ -61,6 +62,7 @@ func newPaymentProviderRegistry() *paymentprovider.Registry {
+ 	registry.Register(constants.PaymentProviderOfficial, constants.PaymentChannelTypeWechat, wechatpayadapter.NewWechatpayAdapter())
+ 	registry.Register(constants.PaymentProviderOfficial, constants.PaymentChannelTypeAlipay, alipayadapter.NewAlipayAdapter())
+ 	registry.Register(constants.PaymentProviderEpay, "", epayadapter.NewEpayAdapter())
++	registry.Register(constants.PaymentProviderPolyPay, "", polypayadapter.NewPolyPayAdapter())
+ 	registry.Register(constants.PaymentProviderEpusdt, "", epusdtadapter.NewEpusdtAdapter())
+ 	registry.Register(constants.PaymentProviderBepusdt, "", bepusdtadapter.NewBepusdtAdapter())
+ 	registry.Register(constants.PaymentProviderDujiaoPay, "", dujiaopayadapter.NewDujiaoPayAdapter())
+diff --git a/internal/app/container/services_integration.go b/internal/app/container/services_integration.go
+index 719e2ed0..fcd9942a 100644
+--- a/internal/app/container/services_integration.go
++++ b/internal/app/container/services_integration.go
+@@ -113,6 +113,7 @@ func (c *Container) initIntegrationServices() {
+ 		PaymentProviderRegistry: c.PaymentProviderRegistry,
+ 		ResellerAccounting:      c.ResellerAccountingLedger,
+ 	})
++	c.OrderService.SetPaymentCancellation(c.PaymentService)
+ 	c.ProcurementOrderService = procurementapp.NewService(procurementapp.Options{
+ 		Repository:         c.ProcurementOrderRepo,
+ 		Orders:             procurementorder.New(c.OrderStore),
+diff --git a/internal/bootstrap/payment/admin_callbacks.go b/internal/bootstrap/payment/admin_callbacks.go
+index a691247d..bfb5e71e 100644
+--- a/internal/bootstrap/payment/admin_callbacks.go
++++ b/internal/bootstrap/payment/admin_callbacks.go
+@@ -192,3 +192,9 @@ func (a exceptionAlerterAdapter) EnqueuePaymentExceptionAlert(method, path, clie
+ 		Data:      payload,
+ 	})
+ }
++
++// HandlePolyPayWebhook translates the native provider result without exposing infrastructure errors.
++func (a webhookServiceAdapter) HandlePolyPayWebhook(input paymenttransport.WebhookCallbackInput) (*paymentdomain.Payment, string, error) {
++	payment, event, err := a.payments.HandlePolyPayWebhook(paymentapp.WebhookCallbackInput{ChannelID: input.ChannelID, Headers: input.Headers, Body: input.Body, Context: input.Context})
++	return payment, event, mapTransportError(err)
++}
+diff --git a/internal/constants/constants.go b/internal/constants/constants.go
+index 7ea202a2..0943b935 100644
+--- a/internal/constants/constants.go
++++ b/internal/constants/constants.go
+@@ -58,6 +58,7 @@ const (
+ const (
+ 	PaymentProviderOfficial  = "official"
+ 	PaymentProviderEpay      = "epay"
++	PaymentProviderPolyPay   = "polypay"
+ 	PaymentProviderEpusdt    = "epusdt"
+ 	PaymentProviderBepusdt   = "bepusdt"
+ 	PaymentProviderDujiaoPay = "dujiaopay"
+diff --git a/internal/modules/order/application/order_service.go b/internal/modules/order/application/order_service.go
+index 29b66e10..2a1d73b7 100644
+--- a/internal/modules/order/application/order_service.go
++++ b/internal/modules/order/application/order_service.go
+@@ -50,6 +50,7 @@ type OrderService struct {
+ 	resellerAccounting      resellerAccountingTransactions
+ 	riskControlSvc          orderriskcontract.Controller
+ 	productMappingService   upstreamStockEnsurer
++	paymentCancellation     ordercontract.PaymentCancellation
+ 	expireMinutes           int
+ }
+ 
+@@ -806,3 +807,8 @@ func validateGuestPassword(password string) error {
+ 	}
+ 	return nil
+ }
++
++// SetPaymentCancellation attaches the remote cancellation port after service construction.
++func (s *OrderService) SetPaymentCancellation(port ordercontract.PaymentCancellation) {
++	s.paymentCancellation = port
++}
+diff --git a/internal/modules/order/application/order_service_child.go b/internal/modules/order/application/order_service_child.go
+index 7a98b0d2..894ed679 100644
+--- a/internal/modules/order/application/order_service_child.go
++++ b/internal/modules/order/application/order_service_child.go
+@@ -17,6 +17,11 @@ func (s *OrderService) cancelOrderWithChildren(order *orderdomain.Order, rollbac
+ 	if order == nil {
+ 		return ErrOrderNotFound
+ 	}
++	if s.paymentCancellation != nil {
++		if err := s.paymentCancellation.CancelPendingGatewayPayments(order.ID); err != nil {
++			return err
++		}
++	}
+ 	now := time.Now()
+ 	err := s.orderStore.WithinTransaction(func(tx ordercontract.Transaction) error {
+ 		orderStore := tx.Orders()
+diff --git a/internal/modules/order/contract/payment_cancellation.go b/internal/modules/order/contract/payment_cancellation.go
+new file mode 100644
+index 00000000..5b923647
+--- /dev/null
++++ b/internal/modules/order/contract/payment_cancellation.go
+@@ -0,0 +1,6 @@
++package contract
++
++// PaymentCancellation closes pending remote attempts before releasing order inventory or balances.
++type PaymentCancellation interface {
++	CancelPendingGatewayPayments(orderID uint) error
++}
+diff --git a/internal/modules/payment/application/payment_service_capture.go b/internal/modules/payment/application/payment_service_capture.go
+index 5e48359a..02ebf400 100644
+--- a/internal/modules/payment/application/payment_service_capture.go
++++ b/internal/modules/payment/application/payment_service_capture.go
+@@ -45,7 +45,7 @@ func (s *PaymentService) CapturePayment(input CapturePaymentInput) (*paymentdoma
+ 	}
+ 
+ 	providerType := strings.ToLower(strings.TrimSpace(channel.ProviderType))
+-	if providerType != constants.PaymentProviderOfficial {
++	if providerType != constants.PaymentProviderOfficial && providerType != constants.PaymentProviderPolyPay {
+ 		return nil, ErrPaymentProviderNotSupported
+ 	}
+ 	if strings.TrimSpace(payment.ProviderRef) == "" {
+@@ -138,3 +138,70 @@ func mapProviderErrorToService(err error) error {
+ 		return fmt.Errorf("%w: %v", ErrPaymentGatewayRequestFailed, err)
+ 	}
+ }
++
++// CancelPendingGatewayPayments reconciles remote PolyPay attempts outside the order transaction.
++func (s *PaymentService) CancelPendingGatewayPayments(orderID uint) error {
++	payments, err := s.paymentRepo.ListByOrderID(orderID)
++	if err != nil {
++		return ErrPaymentUpdateFailed
++	}
++	for i := range payments {
++		if err := s.cancelPolyPayAttempt(&payments[i]); err != nil {
++			return err
++		}
++	}
++	return nil
++}
++
++// cancelPolyPayAttempt makes authenticated remote payment success win cancellation races.
++func (s *PaymentService) cancelPolyPayAttempt(payment *paymentdomain.Payment) error {
++	if payment.ProviderType != constants.PaymentProviderPolyPay || payment.Status == constants.PaymentStatusSuccess {
++		return nil
++	}
++	// A checkout request still in flight must finish before cancellation can prove remote closure.
++	if payment.Status == constants.PaymentStatusInitiated {
++		return ErrPaymentGatewayRequestFailed
++	}
++	ref := strings.TrimSpace(payment.ProviderRef)
++	if ref == "" {
++		ref = "merchant:" + strings.TrimSpace(payment.GatewayOrderNo)
++	}
++	if ref == "merchant:" {
++		return nil
++	} // No durable attempt was submitted.
++	channel, err := s.channelRepo.GetByID(payment.ChannelID)
++	if err != nil || channel == nil || s.paymentProviderRegistry == nil {
++		return ErrPaymentChannelNotFound
++	}
++	provider, ok := s.paymentProviderRegistry.Lookup(channel.ProviderType, channel.ChannelType)
++	if !ok {
++		return ErrPaymentProviderNotSupported
++	}
++	canceller, ok := provider.(paymentcontract.GatewayCanceller)
++	if !ok {
++		return ErrPaymentProviderNotSupported
++	}
++	ctx, cancel := detachOutboundRequestContext(context.Background())
++	defer cancel()
++	result, err := canceller.CancelPayment(ctx, channel.ConfigJSON, ref)
++	if err != nil {
++		return mapProviderErrorToService(err)
++	}
++	if absent, _ := result.Payload["polypay_attempt_absent"].(bool); absent {
++		if payment.Status != constants.PaymentStatusFailed && payment.Status != constants.PaymentStatusInitiated {
++			return ErrPaymentGatewayResponseInvalid
++		}
++		return nil
++	}
++	if result.Status == constants.PaymentStatusPending {
++		return ErrPaymentGatewayRequestFailed
++	}
++	_, err = s.HandleCallback(PaymentCallbackInput{PaymentID: payment.ID, ChannelID: channel.ID, Status: result.Status, ProviderRef: result.ProviderRef, Amount: result.Amount, Currency: result.Currency, PaidAt: result.PaidAt, Payload: result.Payload})
++	if err != nil {
++		return err
++	}
++	if result.Status == constants.PaymentStatusSuccess {
++		return ErrPaymentStatusInvalid
++	}
++	return nil
++}
+diff --git a/internal/modules/payment/application/payment_service_create.go b/internal/modules/payment/application/payment_service_create.go
+index 926b2d36..95f0e7eb 100644
+--- a/internal/modules/payment/application/payment_service_create.go
++++ b/internal/modules/payment/application/payment_service_create.go
+@@ -83,6 +83,19 @@ func (s *PaymentService) CreatePayment(input CreatePaymentInput) (*CreatePayment
+ 		}
+ 	}
+ 
++	// Close obsolete native checkouts before wallet reservation or creating another attempt.
++	previous, listErr := s.paymentRepo.ListByOrderID(input.OrderID)
++	if listErr != nil {
++		return nil, ErrPaymentUpdateFailed
++	}
++	for i := range previous {
++		old := &previous[i]
++		if input.UseBalance || old.ChannelID != input.ChannelID || !hasProviderResult(old) {
++			if cancelErr := s.cancelPolyPayAttempt(old); cancelErr != nil {
++				return nil, cancelErr
++			}
++		}
++	}
+ 	err := s.paymentRepo.WithinTransaction(func(tx paymentcontract.Transaction) error {
+ 		preloaded, err := tx.Orders().GetByIDForUpdateWithChildren(input.OrderID)
+ 		if err != nil {
+@@ -312,6 +325,14 @@ func (s *PaymentService) CreatePayment(input CreatePaymentInput) (*CreatePayment
+ 	if err := s.applyProviderPayment(input, order, channel, payment); err != nil {
+ 		rollbackErr := s.paymentRepo.WithinTransaction(func(tx paymentcontract.Transaction) error {
+ 			paymentRepo := tx.Payments()
++			current, loadErr := paymentRepo.GetByIDForUpdate(payment.ID)
++			if loadErr != nil || current == nil {
++				return ErrPaymentUpdateFailed
++			}
++			if current.Status == constants.PaymentStatusSuccess {
++				*payment = *current
++				return nil
++			}
+ 			payment.Status = constants.PaymentStatusFailed
+ 			payment.UpdatedAt = time.Now()
+ 			if updateErr := paymentRepo.Update(payment); updateErr != nil {
+diff --git a/internal/modules/payment/application/payment_service_provider.go b/internal/modules/payment/application/payment_service_provider.go
+index a58d0729..2d50826d 100644
+--- a/internal/modules/payment/application/payment_service_provider.go
++++ b/internal/modules/payment/application/payment_service_provider.go
+@@ -142,7 +142,7 @@ func (s *PaymentService) applyProviderPayment(input CreatePaymentInput, order *o
+ 	// NotifyURL / ReturnURL 留空：各 adapter/native 包均实现 "input值 || cfg值" fallback，
+ 	// 空值时自动读取 channel.ConfigJSON 里配置的 notify_url / return_url。
+ 	// P1.2c Task 3: returnURLQuery 携带 biz_type/order_no/marker 等，由 wrapper append 到 ReturnURL。
+-	extra := jsonmap.JSON{}
++	extra := jsonmap.JSON{"channel_id": channel.ID}
+ 	if interactionMode := strings.TrimSpace(channel.InteractionMode); interactionMode != "" {
+ 		extra["interaction_mode"] = interactionMode
+ 	}
+@@ -178,6 +178,23 @@ func (s *PaymentService) applyProviderPayment(input CreatePaymentInput, order *o
+ 		ReturnURL: resolveTenantReturnURL(input.Context, input.RequestScheme, channel),
+ 	}
+ 
++	if preparer, ok := p.(paymentcontract.GatewayPaymentPreparer); ok {
++		snapshot, prepareErr := preparer.PreparePayment(channel.ConfigJSON, createInput)
++		if prepareErr != nil {
++			return mapProviderErrorToService(prepareErr)
++		}
++		amount, parseErr := decimal.NewFromString(snapshot.AmountSent)
++		if parseErr != nil {
++			return ErrPaymentChannelConfigInvalid
++		}
++		payment.Amount = money.FromDecimal(amount)
++		payment.Currency = snapshot.CurrencySent
++		payment.ProviderPayload = snapshot.Payload
++		payment.UpdatedAt = time.Now()
++		if updateErr := s.paymentRepo.Update(payment); updateErr != nil {
++			return ErrPaymentUpdateFailed
++		}
++	}
+ 	result, err := p.CreatePayment(gatewayCtx, channel.ConfigJSON, createInput)
+ 	if err != nil {
+ 		return mapProviderErrorToService(err)
+@@ -221,6 +238,22 @@ func (s *PaymentService) applyProviderPayment(input CreatePaymentInput, order *o
+ 	payment.Status = constants.PaymentStatusPending
+ 	payment.UpdatedAt = time.Now()
+ 
++	if providerType == constants.PaymentProviderPolyPay {
++		return s.paymentRepo.WithinTransaction(func(tx paymentcontract.Transaction) error {
++			current, loadErr := tx.Payments().GetByIDForUpdate(payment.ID)
++			if loadErr != nil || current == nil {
++				return ErrPaymentUpdateFailed
++			}
++			if current.Status == constants.PaymentStatusSuccess {
++				*payment = *current
++				return nil
++			}
++			if updateErr := tx.Payments().Update(payment); updateErr != nil {
++				return ErrPaymentUpdateFailed
++			}
++			return nil
++		})
++	}
+ 	if err := s.paymentRepo.Update(payment); err != nil {
+ 		return ErrPaymentUpdateFailed
+ 	}
+@@ -308,6 +341,9 @@ func (s *PaymentService) ValidateChannel(channel *paymentdomain.PaymentChannel)
+ 
+ 	// 非 official provider（epay/bepusdt/epusdt/okpay/tokenpay）只支持 qr/redirect。
+ 	// official provider 的 interaction_mode 验证由各 adapter 的 ValidateConfig 负责。
++	if providerType == constants.PaymentProviderPolyPay && channel.InteractionMode != constants.PaymentInteractionRedirect {
++		return ErrPaymentChannelConfigInvalid
++	}
+ 	if providerType != constants.PaymentProviderOfficial {
+ 		mode := strings.ToLower(strings.TrimSpace(channel.InteractionMode))
+ 		if mode != constants.PaymentInteractionQR && mode != constants.PaymentInteractionRedirect {
+diff --git a/internal/modules/payment/application/payment_service_recharge.go b/internal/modules/payment/application/payment_service_recharge.go
+index d66c1962..cc0367fc 100644
+--- a/internal/modules/payment/application/payment_service_recharge.go
++++ b/internal/modules/payment/application/payment_service_recharge.go
+@@ -259,6 +259,18 @@ func (s *PaymentService) ExpireWalletRechargePayment(paymentID uint) (*paymentdo
+ 		return nil, ErrPaymentUpdateFailed
+ 	}
+ 
++	current, loadErr := s.paymentRepo.GetByID(paymentID)
++	if loadErr != nil {
++		return nil, ErrPaymentUpdateFailed
++	}
++	if current == nil {
++		return nil, ErrPaymentNotFound
++	}
++	if current.OrderID == 0 {
++		if cancelErr := s.cancelPolyPayAttempt(current); cancelErr != nil {
++			return nil, cancelErr
++		}
++	}
+ 	var output *paymentdomain.Payment
+ 	err := s.paymentRepo.WithinTransaction(func(tx paymentcontract.Transaction) error {
+ 		locked, err := tx.Payments().GetByIDForUpdate(paymentID)
+diff --git a/internal/modules/payment/application/payment_service_webhook.go b/internal/modules/payment/application/payment_service_webhook.go
+index ea0b2522..4966977f 100644
+--- a/internal/modules/payment/application/payment_service_webhook.go
++++ b/internal/modules/payment/application/payment_service_webhook.go
+@@ -444,3 +444,12 @@ func (s *PaymentService) HandleStripeWebhook(input WebhookCallbackInput) (*payme
+ 		constants.PaymentChannelTypeStripe,
+ 	)
+ }
++
++// HandlePolyPayWebhook reuses native accounting but never acknowledges an unknown paid attempt.
++func (s *PaymentService) HandlePolyPayWebhook(input WebhookCallbackInput) (*paymentdomain.Payment, string, error) {
++	payment, event, err := s.handleWebhookViaRegistry(input, constants.PaymentProviderPolyPay, "polypay")
++	if err == nil && payment == nil && event == constants.PaymentStatusSuccess {
++		return nil, event, ErrPaymentNotFound
++	}
++	return payment, event, err
++}
+diff --git a/internal/modules/payment/application/payment_service_webhook_test.go b/internal/modules/payment/application/payment_service_webhook_test.go
+index 86d7c46b..ea851d4a 100644
+--- a/internal/modules/payment/application/payment_service_webhook_test.go
++++ b/internal/modules/payment/application/payment_service_webhook_test.go
+@@ -1,7 +1,16 @@
+ package application
+ 
+ import (
++	"context"
+ 	"errors"
++	orderdomain "github.com/dujiao-next/internal/modules/order/domain"
++	paymentcontract "github.com/dujiao-next/internal/modules/payment/contract"
++	paymentdomain "github.com/dujiao-next/internal/modules/payment/domain"
++	"github.com/dujiao-next/internal/shared/jsonmap"
++	"github.com/dujiao-next/internal/shared/money"
++	"github.com/shopspring/decimal"
++	"time"
++
+ 	"testing"
+ 
+ 	"github.com/dujiao-next/internal/constants"
+@@ -56,3 +65,100 @@ func TestHandlePaypalWebhookRequiresChannelID(t *testing.T) {
+ 		t.Fatalf("expected ErrPaymentInvalid for paypal without channel_id, got: %v", err)
+ 	}
+ }
++
++type polypayVerifiedFixture struct {
++	result *paymentcontract.GatewayCallbackResult
++	query  *paymentcontract.GatewayQueryResult
++}
++
++// Type identifies a test port after cryptographic verification, tested separately in the native protocol package.
++func (*polypayVerifiedFixture) Type() string { return "polypay:" }
++
++// ValidateConfig satisfies the provider port with synthetic configuration.
++func (*polypayVerifiedFixture) ValidateConfig(jsonmap.JSON, string) error { return nil }
++
++// CreatePayment is deliberately unavailable in accounting fixtures.
++func (*polypayVerifiedFixture) CreatePayment(context.Context, jsonmap.JSON, paymentcontract.GatewayCreateInput) (*paymentcontract.GatewayCreateResult, error) {
++	return nil, errors.New("unused")
++}
++
++// ParseWebhook provides verified facts to exercise real host database transactions and fulfillment.
++func (p *polypayVerifiedFixture) ParseWebhook(context.Context, jsonmap.JSON, map[string]string, []byte, time.Time) (*paymentcontract.GatewayCallbackResult, error) {
++	return p.result, nil
++}
++
++// CancelPayment provides an authoritative remote state for cancellation races.
++func (p *polypayVerifiedFixture) CancelPayment(context.Context, jsonmap.JSON, string) (*paymentcontract.GatewayQueryResult, error) {
++	return p.query, nil
++}
++
++// TestPolyPayUSDWebhookAccounting verifies converted coverage, idempotency, wrong amounts, unknown attempts and cancellation races.
++func TestPolyPayUSDWebhookAccounting(t *testing.T) {
++	for _, scenario := range []string{"paid", "wrong-amount", "unknown", "cancel-paid", "cancel-pending", "cancel-closed"} {
++		t.Run(scenario, func(t *testing.T) {
++			svc, db := setupPaymentServiceWalletTest(t)
++			now := time.Now()
++			cny := money.FromDecimal(decimal.NewFromInt(88))
++			usd := money.FromDecimal(decimal.RequireFromString("12.32"))
++			channel := &paymentdomain.PaymentChannel{Name: "PolyPay", ProviderType: "polypay", ChannelType: "polypay", InteractionMode: "redirect", IsActive: true}
++			if err := db.Create(channel).Error; err != nil {
++				t.Fatal(err)
++			}
++			order := &orderdomain.Order{OrderNo: "DJ-native", UserID: 1, Status: constants.OrderStatusPendingPayment, Currency: "CNY", OriginalAmount: cny, TotalAmount: cny, OnlinePaidAmount: cny, CreatedAt: now, UpdatedAt: now}
++			if err := db.Create(order).Error; err != nil {
++				t.Fatal(err)
++			}
++			payment := &paymentdomain.Payment{OrderID: order.ID, ChannelID: channel.ID, ProviderType: "polypay", ChannelType: "polypay", InteractionMode: "redirect", GatewayOrderNo: "DJP-native", ProviderRef: "trade-native", Status: constants.PaymentStatusPending, Amount: usd, Currency: "USD", ProviderPayload: jsonmap.JSON{"original_amount": "88.00", "original_currency": "CNY", "exchange_rate": "0.14", paymentcontract.GatewayPayloadFiatCurrencySent: "USD"}, CreatedAt: now, UpdatedAt: now}
++			if err := db.Create(payment).Error; err != nil {
++				t.Fatal(err)
++			}
++			provider := &polypayVerifiedFixture{result: &paymentcontract.GatewayCallbackResult{OrderNo: payment.GatewayOrderNo, Status: constants.PaymentStatusSuccess, Amount: usd, Currency: "USD"}, query: &paymentcontract.GatewayQueryResult{ProviderRef: payment.ProviderRef, Status: constants.PaymentStatusSuccess, Amount: usd, Currency: "USD"}}
++			registerTestGateway(t, svc, "polypay", "", provider)
++			var err error
++			switch scenario {
++			case "wrong-amount":
++				provider.result.Amount = cny
++			case "unknown":
++				provider.result.OrderNo = "DJP-unknown"
++			case "cancel-pending":
++				provider.query.Status = constants.PaymentStatusPending
++			case "cancel-closed":
++				provider.query.Status = constants.PaymentStatusExpired
++			}
++			switch scenario {
++			case "cancel-paid", "cancel-pending", "cancel-closed":
++				err = svc.CancelPendingGatewayPayments(order.ID)
++			default:
++				_, _, err = svc.HandlePolyPayWebhook(WebhookCallbackInput{ChannelID: channel.ID})
++				if scenario == "paid" && err == nil {
++					_, _, err = svc.HandlePolyPayWebhook(WebhookCallbackInput{ChannelID: channel.ID})
++				}
++			}
++			if scenario == "paid" || scenario == "cancel-closed" {
++				if err != nil {
++					t.Fatal(err)
++				}
++			} else if err == nil {
++				t.Fatalf("%s unexpectedly accepted", scenario)
++			}
++			var stored orderdomain.Order
++			if err := db.First(&stored, order.ID).Error; err != nil {
++				t.Fatal(err)
++			}
++			want := constants.OrderStatusPendingPayment
++			if scenario == "paid" || scenario == "cancel-paid" {
++				want = constants.OrderStatusPaid
++			}
++			if stored.Status != want {
++				t.Fatalf("order status %q, want %q", stored.Status, want)
++			}
++			var saved paymentdomain.Payment
++			if err := db.First(&saved, payment.ID).Error; err != nil {
++				t.Fatal(err)
++			}
++			if saved.ProviderPayload["original_currency"] != "CNY" || !saved.Amount.Decimal.Equal(usd.Decimal) {
++				t.Fatal("conversion snapshot was lost")
++			}
++		})
++	}
++}
+diff --git a/internal/modules/payment/contract/gateway.go b/internal/modules/payment/contract/gateway.go
+index cacd22a5..ae083a19 100644
+--- a/internal/modules/payment/contract/gateway.go
++++ b/internal/modules/payment/contract/gateway.go
+@@ -103,3 +103,14 @@ type GatewayCallbackVerifier interface {
+ type GatewayRegistry interface {
+ 	Lookup(providerType, channelType string) (GatewayProvider, bool)
+ }
++
++// GatewayCanceller reconciles pending remote attempts before canceling them.
++type GatewayCanceller interface {
++	GatewayProvider
++	CancelPayment(context.Context, jsonmap.JSON, string) (*GatewayQueryResult, error)
++}
++
++// GatewayPaymentPreparer snapshots fiat accounting before an external payment can be created.
++type GatewayPaymentPreparer interface {
++	PreparePayment(jsonmap.JSON, GatewayCreateInput) (*GatewayCreateResult, error)
++}
+diff --git a/internal/modules/payment/infrastructure/gateway/adapters/polypay/adapter.go b/internal/modules/payment/infrastructure/gateway/adapters/polypay/adapter.go
+new file mode 100644
+index 00000000..c98a28c1
+--- /dev/null
++++ b/internal/modules/payment/infrastructure/gateway/adapters/polypay/adapter.go
+@@ -0,0 +1,174 @@
++package polypayadapter
++
++import (
++	"context"
++	"errors"
++	"fmt"
++	"strings"
++	"time"
++
++	"github.com/dujiao-next/internal/cache"
++	"github.com/dujiao-next/internal/constants"
++	paymentcontract "github.com/dujiao-next/internal/modules/payment/contract"
++	gatewaycommon "github.com/dujiao-next/internal/modules/payment/infrastructure/gateway/common"
++	"github.com/dujiao-next/internal/modules/payment/infrastructure/gateway/polypay"
++	"github.com/dujiao-next/internal/shared/jsonmap"
++	"github.com/dujiao-next/internal/shared/money"
++	"github.com/shopspring/decimal"
++)
++
++type adapter struct{ client *polypay.Client }
++
++// NewPolyPayAdapter registers the native PolyPay provider with durable Redis replay prevention.
++func NewPolyPayAdapter() paymentcontract.GatewayProvider {
++	return &adapter{client: polypay.NewClient(nil, func(ctx context.Context, key string, ttl time.Duration) (bool, error) {
++		client := cache.Client()
++		if client == nil {
++			return false, cache.ErrUnavailable
++		}
++		return client.SetNX(ctx, key, "1", ttl).Result()
++	})}
++}
++
++// Type identifies the native provider without an EPay protocol wrapper.
++func (a *adapter) Type() string { return constants.PaymentProviderPolyPay + ":" }
++
++// ValidateConfig permits only the PolyPay hosted-checkout channel and redirect mode.
++func (a *adapter) ValidateConfig(raw jsonmap.JSON, channel string) error {
++	if channel != "" && channel != "polypay" && channel != constants.PaymentInteractionRedirect {
++		return paymentcontract.ErrGatewayUnsupportedChannel
++	}
++	_, err := polypay.ParseConfig(raw)
++	return err
++}
++
++// CreatePayment snapshots original accounting and the USD conversion submitted to PolyPay.
++func (a *adapter) CreatePayment(ctx context.Context, raw jsonmap.JSON, input paymentcontract.GatewayCreateInput) (*paymentcontract.GatewayCreateResult, error) {
++	cfg, err := polypay.ParseConfig(raw)
++	if err != nil {
++		return nil, err
++	}
++	if input.ChannelType != "polypay" {
++		return nil, paymentcontract.ErrGatewayUnsupportedChannel
++	}
++	if mode, _ := input.Extra["interaction_mode"].(string); mode != "" && mode != constants.PaymentInteractionRedirect {
++		return nil, paymentcontract.ErrGatewayConfigInvalid
++	}
++	snapshot, err := a.PreparePayment(raw, input)
++	if err != nil {
++		return nil, err
++	}
++	amount, _ := decimal.NewFromString(snapshot.AmountSent)
++	redirect := cfg.ReturnURL
++	if input.ReturnURL != "" {
++		redirect = input.ReturnURL
++	}
++	redirect = gatewaycommon.AppendQueryParams(redirect, input.ReturnURLQuery)
++	notify := gatewaycommon.AppendQueryParams(cfg.NotifyURL, map[string]string{"channel_id": fmt.Sprint(input.Extra["channel_id"])})
++	checkout, order, err := a.client.Checkout(ctx, cfg, input.OrderNo, amount.StringFixed(2), notify, redirect)
++	if err != nil {
++		return nil, err
++	}
++	actual, err := decimal.NewFromString(order.FiatAmount.String())
++	if err != nil || !actual.Equal(amount) {
++		return nil, paymentcontract.ErrGatewayResponseInvalid
++	}
++	snapshot.ProviderRef = order.TradeID
++	snapshot.RedirectURL = checkout
++	return snapshot, nil
++}
++
++// orderResult maps only authenticated remote states; manual recharge never authorizes a purchase.
++func orderResult(order *polypay.Order) (*paymentcontract.GatewayQueryResult, error) {
++	amount, err := parseUSD(order.FiatAmount.String())
++	if err != nil {
++		return nil, paymentcontract.ErrGatewayResponseInvalid
++	}
++	status := constants.PaymentStatusPending
++	switch order.Status {
++	case 2, 7:
++		status = constants.PaymentStatusSuccess
++	case 3, 4:
++		status = constants.PaymentStatusExpired
++	case 0, 1, 6:
++	default:
++		return nil, paymentcontract.ErrGatewayResponseInvalid
++	}
++	return &paymentcontract.GatewayQueryResult{ProviderRef: order.TradeID, Status: status, Amount: amount, Currency: "USD", Payload: jsonmap.JSON{"polypay_order_no": order.OrderNo}}, nil
++}
++
++// QueryPayment reconciles the actual attempt using its stored trade ID.
++func (a *adapter) QueryPayment(ctx context.Context, raw jsonmap.JSON, trade string) (*paymentcontract.GatewayQueryResult, error) {
++	cfg, err := polypay.ParseConfig(raw)
++	if err != nil {
++		return nil, err
++	}
++	order, err := a.client.Query(ctx, cfg, trade)
++	if err != nil {
++		return nil, err
++	}
++	return orderResult(order)
++}
++
++// CancelPayment cancels only pending attempts and reconciles ambiguous responses.
++func (a *adapter) CancelPayment(ctx context.Context, raw jsonmap.JSON, trade string) (*paymentcontract.GatewayQueryResult, error) {
++	cfg, err := polypay.ParseConfig(raw)
++	if err != nil {
++		return nil, err
++	}
++	order, err := a.client.Cancel(ctx, cfg, trade)
++	if errors.Is(err, polypay.ErrOrderNotFound) && strings.HasPrefix(trade, "merchant:") {
++		return &paymentcontract.GatewayQueryResult{Status: constants.PaymentStatusExpired, Payload: jsonmap.JSON{"polypay_attempt_absent": true}}, nil
++	}
++	if err != nil {
++		return nil, err
++	}
++	return orderResult(order)
++}
++
++// ParseWebhook verifies strict Ed25519 v2 and hands USD facts to the host's transactional fulfillment.
++func (a *adapter) ParseWebhook(ctx context.Context, raw jsonmap.JSON, headers map[string]string, body []byte, now time.Time) (*paymentcontract.GatewayCallbackResult, error) {
++	cfg, err := polypay.ParseConfig(raw)
++	if err != nil {
++		return nil, err
++	}
++	event, err := a.client.Verify(ctx, cfg, headers, body, now)
++	if err != nil {
++		return nil, err
++	}
++	if event.Status != 2 && event.Status != 7 {
++		return &paymentcontract.GatewayCallbackResult{}, nil
++	}
++	amount, err := parseUSD(event.FiatAmount.String())
++	if err != nil || !amount.Decimal.IsPositive() {
++		return nil, paymentcontract.ErrGatewayResponseInvalid
++	}
++	return &paymentcontract.GatewayCallbackResult{OrderNo: strings.TrimSpace(event.OrderNo), Status: constants.PaymentStatusSuccess, Amount: amount, Currency: "USD", Payload: jsonmap.JSON{"event_id": event.EventID, "environment": "production", "polypay_merchant_id": cfg.MerchantID}}, nil
++}
++
++var _ paymentcontract.GatewayWebhooker = (*adapter)(nil)
++var _ paymentcontract.GatewayCapturer = (*adapter)(nil)
++var _ paymentcontract.GatewayCanceller = (*adapter)(nil)
++
++// parseUSD validates the fixed fiat precision before constructing the host money value.
++func parseUSD(raw string) (money.Amount, error) {
++	value, err := decimal.NewFromString(raw)
++	if err != nil || !value.Equal(value.Round(2)) {
++		return money.Amount{}, paymentcontract.ErrGatewayResponseInvalid
++	}
++	return money.FromDecimal(value), nil
++}
++
++// PreparePayment fixes the conversion rate and original coverage before checkout leaves the process.
++func (a *adapter) PreparePayment(raw jsonmap.JSON, input paymentcontract.GatewayCreateInput) (*paymentcontract.GatewayCreateResult, error) {
++	cfg, err := polypay.ParseConfig(raw)
++	if err != nil {
++		return nil, err
++	}
++	rate, _ := decimal.NewFromString(cfg.USDRate)
++	amount := input.Amount.Decimal.Mul(rate).Round(2)
++	if !amount.IsPositive() {
++		return nil, paymentcontract.ErrGatewayConfigInvalid
++	}
++	return &paymentcontract.GatewayCreateResult{AmountSent: amount.StringFixed(2), CurrencySent: "USD", Payload: jsonmap.JSON{"exchange_rate": rate.String(), "original_amount": input.Amount.Decimal.StringFixed(2), "original_currency": input.Currency, "polypay_merchant_id": cfg.MerchantID, "polypay_order_no": input.OrderNo, paymentcontract.GatewayPayloadFiatCurrencySent: "USD"}}, nil
++}
+diff --git a/internal/modules/payment/infrastructure/gateway/adapters/polypay/adapter_test.go b/internal/modules/payment/infrastructure/gateway/adapters/polypay/adapter_test.go
+new file mode 100644
+index 00000000..8e7745b0
+--- /dev/null
++++ b/internal/modules/payment/infrastructure/gateway/adapters/polypay/adapter_test.go
+@@ -0,0 +1,34 @@
++package polypayadapter
++
++import (
++	"encoding/json"
++	"testing"
++
++	paymentcontract "github.com/dujiao-next/internal/modules/payment/contract"
++	"github.com/dujiao-next/internal/modules/payment/infrastructure/gateway/polypay"
++	"github.com/dujiao-next/internal/shared/jsonmap"
++	"github.com/dujiao-next/internal/shared/money"
++	"github.com/shopspring/decimal"
++)
++
++// TestFiatSnapshotAndRemoteStates verifies original coverage survives conversion and disallows recharge statuses.
++func TestFiatSnapshotAndRemoteStates(t *testing.T) {
++	a := NewPolyPayAdapter().(*adapter)
++	raw := jsonmap.JSON{"api_key": "synthetic", "merchant_id": "MCH-test", "usd_rate": "0.14", "notify_url": "https://store.test/hook", "return_url": "https://store.test/pay"}
++	snapshot, err := a.PreparePayment(raw, paymentcontract.GatewayCreateInput{OrderNo: "DJP-test", Currency: "CNY", Amount: money.FromDecimal(decimal.NewFromInt(88))})
++	if err != nil || snapshot.AmountSent != "12.32" || snapshot.CurrencySent != "USD" || snapshot.Payload["original_currency"] != "CNY" || snapshot.Payload["original_amount"] != "88.00" {
++		t.Fatalf("invalid snapshot %+v %v", snapshot, err)
++	}
++	for _, status := range []int{0, 1, 2, 3, 4, 5, 6, 7, 99} {
++		result, err := orderResult(&polypay.Order{TradeID: "trade", OrderNo: "DJP-test", Status: status, FiatAmount: json.Number("12.32")})
++		if status == 5 || status == 99 {
++			if err == nil {
++				t.Fatalf("unsafe status %d accepted", status)
++			}
++			continue
++		}
++		if err != nil || result.Amount.Decimal.StringFixed(2) != "12.32" {
++			t.Fatalf("status %d: %+v %v", status, result, err)
++		}
++	}
++}
+diff --git a/internal/modules/payment/infrastructure/gateway/polypay/client.go b/internal/modules/payment/infrastructure/gateway/polypay/client.go
+new file mode 100644
+index 00000000..ae7fbda8
+--- /dev/null
++++ b/internal/modules/payment/infrastructure/gateway/polypay/client.go
+@@ -0,0 +1,162 @@
++package polypay
++
++import (
++	"bytes"
++	"context"
++	"encoding/json"
++	"errors"
++	"fmt"
++	"io"
++	"net/http"
++	"net/url"
++	"strings"
++	"sync"
++	"time"
++
++	paymentcontract "github.com/dujiao-next/internal/modules/payment/contract"
++)
++
++// ErrOrderNotFound is returned only for the authenticated merchant API code 10006.
++var ErrOrderNotFound = errors.New("PolyPay order not found")
++
++// NonceConsumer atomically consumes an authenticated delivery nonce for its validity window.
++type NonceConsumer func(context.Context, string, time.Duration) (bool, error)
++
++// Client implements canonical merchant APIs and strict Ed25519 Webhook v2 verification.
++type Client struct {
++	http      *http.Client
++	consume   NonceConsumer
++	mu        sync.Mutex
++	keys      map[string][]byte
++	keysUntil time.Time
++}
++
++// NewClient binds a bounded HTTPS transport and a durable replay-prevention implementation.
++func NewClient(client *http.Client, consume NonceConsumer) *Client {
++	if client == nil {
++		client = &http.Client{Timeout: 15 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
++	}
++	return &Client{http: client, consume: consume}
++}
++
++// Order is an authenticated server order snapshot; fiat amounts are USD, never token quantities.
++type Order struct {
++	TradeID     string      `json:"trade_id"`
++	OrderNo     string      `json:"mch_order_id"`
++	Status      int         `json:"status"`
++	Environment string      `json:"environment"`
++	FiatAmount  json.Number `json:"fiat_amount"`
++}
++
++// request performs a bounded merchant request without reflecting keys or response bodies into errors.
++func (c *Client) request(ctx context.Context, cfg *Config, operation string, input any, output any) error {
++	body, err := json.Marshal(input)
++	if err != nil {
++		return paymentcontract.ErrGatewayRequestFailed
++	}
++	req, err := http.NewRequestWithContext(ctx, http.MethodPost, APIBaseURL+"/order/"+operation, bytes.NewReader(body))
++	if err != nil {
++		return paymentcontract.ErrGatewayRequestFailed
++	}
++	req.Header.Set("Content-Type", "application/json")
++	req.Header.Set("X-API-Key", cfg.APIKey)
++	res, err := c.http.Do(req)
++	if err != nil {
++		return paymentcontract.ErrGatewayRequestFailed
++	}
++	defer res.Body.Close()
++	if res.StatusCode < 200 || res.StatusCode >= 300 {
++		return paymentcontract.ErrGatewayRequestFailed
++	}
++	var envelope struct {
++		Code int             `json:"code"`
++		Data json.RawMessage `json:"data"`
++	}
++	data, err := io.ReadAll(io.LimitReader(res.Body, (1<<20)+1))
++	if err != nil || len(data) > 1<<20 || json.Unmarshal(data, &envelope) != nil {
++		return paymentcontract.ErrGatewayResponseInvalid
++	}
++	if envelope.Code == 10006 {
++		return ErrOrderNotFound
++	}
++	if envelope.Code != 0 {
++		return fmt.Errorf("%w: PolyPay code %d", paymentcontract.ErrGatewayRequestFailed, envelope.Code)
++	}
++	if output != nil && json.Unmarshal(envelope.Data, output) != nil {
++		return paymentcontract.ErrGatewayResponseInvalid
++	}
++	return nil
++}
++
++// Checkout creates an idempotent merchant attempt and resolves its authoritative trade identifier.
++func (c *Client) Checkout(ctx context.Context, cfg *Config, orderNo, amount, notify, redirect string) (string, *Order, error) {
++	if len(orderNo) == 0 || len(orderNo) > 32 {
++		return "", nil, paymentcontract.ErrGatewayConfigInvalid
++	}
++	if err := cfg.ValidateURL(notify); err != nil {
++		return "", nil, err
++	}
++	if err := cfg.ValidateURL(redirect); err != nil {
++		return "", nil, err
++	}
++	var checkout struct {
++		URL string `json:"checkout_url"`
++	}
++	if err := c.request(ctx, cfg, "checkout", map[string]string{"mch_order_id": orderNo, "amount": amount, "notify_url": notify, "redirect_url": redirect}, &checkout); err != nil {
++		return "", nil, err
++	}
++	parsed, err := url.Parse(checkout.URL)
++	if err != nil || parsed.Scheme != "https" || parsed.Hostname() == "" || parsed.User != nil {
++		return "", nil, paymentcontract.ErrGatewayResponseInvalid
++	}
++	var order Order
++	if err := c.request(ctx, cfg, "detail", map[string]string{"mch_order_id": orderNo}, &order); err != nil {
++		return "", nil, err
++	}
++	if order.TradeID == "" || order.OrderNo != orderNo || order.Environment != "production" {
++		return "", nil, paymentcontract.ErrGatewayResponseInvalid
++	}
++	return checkout.URL, &order, nil
++}
++
++// Query retrieves a payment attempt using its actual PolyPay trade ID.
++func (c *Client) Query(ctx context.Context, cfg *Config, trade string) (*Order, error) {
++	if trade == "" {
++		return nil, paymentcontract.ErrGatewayConfigInvalid
++	}
++	var order Order
++	query := map[string]string{"trade_id": trade}
++	merchantNo, byMerchant := strings.CutPrefix(trade, "merchant:")
++	if byMerchant {
++		query = map[string]string{"mch_order_id": merchantNo}
++	}
++	if err := c.request(ctx, cfg, "detail", query, &order); err != nil {
++		return nil, err
++	}
++	if order.TradeID == "" || (!byMerchant && order.TradeID != trade) || (byMerchant && order.OrderNo != merchantNo) || order.OrderNo == "" || order.Environment != "production" {
++		return nil, paymentcontract.ErrGatewayResponseInvalid
++	}
++	return &order, nil
++}
++
++// Cancel reconciles before and after cancellation so paid orders always win a race.
++func (c *Client) Cancel(ctx context.Context, cfg *Config, trade string) (*Order, error) {
++	order, err := c.Query(ctx, cfg, trade)
++	if err != nil {
++		return nil, err
++	}
++	if order.Status == 0 || order.Status == 1 {
++		cancelErr := c.request(ctx, cfg, "cancel", map[string]string{"trade_id": order.TradeID}, nil)
++		order, err = c.Query(ctx, cfg, trade)
++		if err != nil {
++			return nil, err
++		}
++		if order.Status == 0 || order.Status == 1 {
++			if cancelErr != nil {
++				return nil, cancelErr
++			}
++			return nil, paymentcontract.ErrGatewayRequestFailed
++		}
++	}
++	return order, nil
++}
+diff --git a/internal/modules/payment/infrastructure/gateway/polypay/client_test.go b/internal/modules/payment/infrastructure/gateway/polypay/client_test.go
+new file mode 100644
+index 00000000..e457558f
+--- /dev/null
++++ b/internal/modules/payment/infrastructure/gateway/polypay/client_test.go
+@@ -0,0 +1,190 @@
++package polypay
++
++import (
++	"context"
++	"crypto/ed25519"
++	"crypto/rand"
++	"encoding/base64"
++	"encoding/json"
++	"fmt"
++	"io"
++	"net/http"
++	"net/http/httptest"
++	"net/url"
++	"strconv"
++	"strings"
++	"sync"
++	"testing"
++	"time"
++
++	"github.com/dujiao-next/internal/shared/jsonmap"
++)
++
++type rewriteTransport struct {
++	base   http.RoundTripper
++	target *url.URL
++}
++
++// RoundTrip keeps the production-origin assertion while routing tests to a TLS fixture.
++func (r rewriteTransport) RoundTrip(req *http.Request) (*http.Response, error) {
++	if req.URL.Scheme != "https" || req.URL.Host != "api.polypay.ai" {
++		return nil, fmt.Errorf("unexpected API origin")
++	}
++	clone := req.Clone(req.Context())
++	clone.URL.Scheme = r.target.Scheme
++	clone.URL.Host = r.target.Host
++	return r.base.RoundTrip(clone)
++}
++
++// fixtureClient creates an isolated TLS API without exposing a configurable production API origin.
++func fixtureClient(t *testing.T, handler http.HandlerFunc, consume NonceConsumer) *Client {
++	t.Helper()
++	server := httptest.NewTLSServer(handler)
++	t.Cleanup(server.Close)
++	target, _ := url.Parse(server.URL)
++	client := server.Client()
++	client.Transport = rewriteTransport{client.Transport, target}
++	return NewClient(client, consume)
++}
++
++// testConfig contains synthetic credentials only.
++func testConfig() *Config {
++	disabled := false
++	return &Config{APIKey: "test-key", MerchantID: "MCH-test", USDRate: "0.14", NotifyURL: "http://192.168.1.2/callback", ReturnURL: "http://192.168.1.2/pay", ForceHTTPS: &disabled}
++}
++
++// TestCheckoutAndCancelRace proves that a paid result overrides an ambiguous cancel response.
++func TestCheckoutAndCancelRace(t *testing.T) {
++	for _, paid := range []bool{false, true} {
++		t.Run(fmt.Sprint(paid), func(t *testing.T) {
++			status := 0
++			client := fixtureClient(t, func(w http.ResponseWriter, r *http.Request) {
++				if r.Header.Get("X-API-Key") != "test-key" {
++					t.Error("missing API authentication")
++				}
++				var input map[string]string
++				if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
++					t.Error(err)
++				}
++				switch r.URL.Path {
++				case "/api/v1/pay/order/checkout":
++					if input["amount"] != "1.40" || input["mch_order_id"] != "DJP-test" {
++						t.Error("wrong checkout accounting")
++					}
++					io.WriteString(w, `{"code":0,"data":{"checkout_url":"https://pay.polypay.ai/test"}}`)
++				case "/api/v1/pay/order/detail":
++					fmt.Fprintf(w, `{"code":0,"data":{"trade_id":"trade-test","mch_order_id":"DJP-test","status":%d,"fiat_amount":"1.40","environment":"production"}}`, status)
++				case "/api/v1/pay/order/cancel":
++					if input["trade_id"] != "trade-test" {
++						t.Error("cancel did not resolve actual trade ID")
++					}
++					status = 4
++					if paid {
++						status = 2
++					}
++					w.WriteHeader(503)
++				default:
++					t.Errorf("unexpected path %s", r.URL.Path)
++					w.WriteHeader(404)
++				}
++			}, nil)
++			_, order, err := client.Checkout(context.Background(), testConfig(), "DJP-test", "1.40", testConfig().NotifyURL, testConfig().ReturnURL)
++			if err != nil || order.TradeID != "trade-test" {
++				t.Fatalf("checkout: %v %+v", err, order)
++			}
++			result, err := client.Cancel(context.Background(), testConfig(), "merchant:DJP-test")
++			want := 4
++			if paid {
++				want = 2
++			}
++			if err != nil || result.Status != want {
++				t.Fatalf("cancel state: %v %+v", err, result)
++			}
++		})
++	}
++}
++
++// TestWebhookV2 verifies exact raw bytes, freshness, audience, key rotation and durable replay prevention.
++func TestWebhookV2(t *testing.T) {
++	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
++	pub2, priv2, _ := ed25519.GenerateKey(rand.Reader)
++	var mu sync.Mutex
++	nonces := map[string]bool{}
++	unavailable := false
++	requests := 0
++	client := fixtureClient(t, func(w http.ResponseWriter, r *http.Request) {
++		requests++
++		if r.URL.Path != "/api/v1/pay/public/webhook-jwks" || r.Header.Get("X-API-Key") != "" {
++			t.Error("invalid public key request")
++		}
++		id, key := "key-1", pub
++		if requests > 1 {
++			id, key = "key-2", pub2
++		}
++		fmt.Fprintf(w, `{"code":0,"data":{"keys":[{"kty":"OKP","crv":"Ed25519","alg":"EdDSA","use":"sig","kid":%q,"x":%q}]}}`, id, base64.RawURLEncoding.EncodeToString(key))
++	}, func(_ context.Context, key string, ttl time.Duration) (bool, error) {
++		mu.Lock()
++		defer mu.Unlock()
++		if unavailable {
++			return false, fmt.Errorf("redis unavailable")
++		}
++		if ttl != 10*time.Minute {
++			t.Error("incorrect nonce TTL")
++		}
++		if nonces[key] {
++			return false, nil
++		}
++		nonces[key] = true
++		return true, nil
++	})
++	now := time.Now().Truncate(time.Second)
++	body := []byte(`{"order_no":"DJP-test","event_id":"evt-test","status":2,"fiat_amount":1.40,"amount":"999999","environment":"production"}`)
++	sign := func(id, nonce string, key ed25519.PrivateKey) map[string]string {
++		stamp := strconv.FormatInt(now.Unix(), 10)
++		text := strings.Join([]string{"polypay-webhook-v2", id, stamp, nonce, "MCH-test", "production", string(body)}, "\n")
++		return map[string]string{"X-Webhook-Signature-Version": "v2", "X-Webhook-Key-Id": id, "X-Timestamp": stamp, "X-Nonce": nonce, "X-Webhook-Merchant-Id": "MCH-test", "X-Webhook-Environment": "production", "X-Webhook-Signature-V2": base64.RawURLEncoding.EncodeToString(ed25519.Sign(key, []byte(text)))}
++	}
++	valid := sign("key-1", "0123456789abcdef", priv)
++	if _, err := client.Verify(context.Background(), testConfig(), valid, append(append([]byte{}, body...), ' '), now); err == nil {
++		t.Fatal("tampered bytes accepted")
++	}
++	wrong := sign("key-1", "1123456789abcdef", priv)
++	wrong["X-Webhook-Merchant-Id"] = "other"
++	if _, err := client.Verify(context.Background(), testConfig(), wrong, body, now); err == nil {
++		t.Fatal("wrong merchant accepted")
++	}
++	if _, err := client.Verify(context.Background(), testConfig(), valid, body, now.Add(301*time.Second)); err == nil {
++		t.Fatal("expired signature accepted")
++	}
++	event, err := client.Verify(context.Background(), testConfig(), valid, body, now)
++	if err != nil || event.FiatAmount.String() != "1.40" {
++		t.Fatalf("valid event: %v %+v", err, event)
++	}
++	if _, err := client.Verify(context.Background(), testConfig(), valid, body, now); err == nil {
++		t.Fatal("replay accepted")
++	}
++	rotated := sign("key-2", "2123456789abcdef", priv2)
++	if _, err := client.Verify(context.Background(), testConfig(), rotated, body, now); err != nil {
++		t.Fatalf("rotation: %v", err)
++	}
++	unavailable = true
++	if _, err := client.Verify(context.Background(), testConfig(), sign("key-2", "3123456789abcdef", priv2), body, now); err == nil {
++		t.Fatal("missing replay store accepted")
++	}
++}
++
++// TestHTTPRequiresExplicitSwitch ensures LAN HTTP is intentional and never changes the API origin.
++func TestHTTPRequiresExplicitSwitch(t *testing.T) {
++	raw := jsonmap.JSON{"api_key": "synthetic", "merchant_id": "MCH-test", "usd_rate": "0.14", "notify_url": "http://192.168.1.2/hook", "return_url": "http://192.168.1.2/pay"}
++	if _, err := ParseConfig(raw); err == nil {
++		t.Fatal("HTTP accepted by default")
++	}
++	raw["force_https"] = false
++	if _, err := ParseConfig(raw); err != nil {
++		t.Fatal(err)
++	}
++	raw["usd_rate"] = "0"
++	if _, err := ParseConfig(raw); err == nil {
++		t.Fatal("zero conversion accepted")
++	}
++}
+diff --git a/internal/modules/payment/infrastructure/gateway/polypay/config.go b/internal/modules/payment/infrastructure/gateway/polypay/config.go
+new file mode 100644
+index 00000000..0f14e2d3
+--- /dev/null
++++ b/internal/modules/payment/infrastructure/gateway/polypay/config.go
+@@ -0,0 +1,58 @@
++package polypay
++
++import (
++	"encoding/json"
++	"fmt"
++	"net/url"
++	"strings"
++
++	paymentcontract "github.com/dujiao-next/internal/modules/payment/contract"
++	"github.com/dujiao-next/internal/shared/jsonmap"
++	"github.com/shopspring/decimal"
++)
++
++const APIBaseURL = "https://api.polypay.ai/api/v1/pay"
++
++// Config contains server-only merchant credentials and storefront callback settings.
++type Config struct {
++	APIKey     string `json:"api_key"`
++	MerchantID string `json:"merchant_id"`
++	USDRate    string `json:"usd_rate"`
++	NotifyURL  string `json:"notify_url"`
++	ReturnURL  string `json:"return_url"`
++	ForceHTTPS *bool  `json:"force_https"`
++}
++
++// ParseConfig rejects incomplete merchant settings without changing environments.
++func ParseConfig(raw jsonmap.JSON) (*Config, error) {
++	data, err := json.Marshal(raw)
++	if err != nil {
++		return nil, paymentcontract.ErrGatewayConfigInvalid
++	}
++	var cfg Config
++	if json.Unmarshal(data, &cfg) != nil {
++		return nil, paymentcontract.ErrGatewayConfigInvalid
++	}
++	cfg.APIKey = strings.TrimSpace(cfg.APIKey)
++	cfg.MerchantID = strings.TrimSpace(cfg.MerchantID)
++	rate, err := decimal.NewFromString(cfg.USDRate)
++	if cfg.APIKey == "" || cfg.MerchantID == "" || err != nil || !rate.IsPositive() {
++		return nil, paymentcontract.ErrGatewayConfigInvalid
++	}
++	for _, target := range []string{cfg.NotifyURL, cfg.ReturnURL} {
++		if err := cfg.ValidateURL(target); err != nil {
++			return nil, err
++		}
++	}
++	return &cfg, nil
++}
++
++// ValidateURL permits HTTP only when the merchant explicitly disables Force HTTPS.
++func (c Config) ValidateURL(raw string) error {
++	parsed, err := url.Parse(raw)
++	force := c.ForceHTTPS == nil || *c.ForceHTTPS
++	if err != nil || parsed.Hostname() == "" || parsed.User != nil || parsed.Fragment != "" || strings.ContainsAny(raw, "\r\n\t\\ ") || !(parsed.Scheme == "https" || (!force && parsed.Scheme == "http")) {
++		return fmt.Errorf("%w: invalid storefront URL or HTTPS requirement", paymentcontract.ErrGatewayConfigInvalid)
++	}
++	return nil
++}
+diff --git a/internal/modules/payment/infrastructure/gateway/polypay/webhook.go b/internal/modules/payment/infrastructure/gateway/polypay/webhook.go
+new file mode 100644
+index 00000000..726d90b1
+--- /dev/null
++++ b/internal/modules/payment/infrastructure/gateway/polypay/webhook.go
+@@ -0,0 +1,134 @@
++package polypay
++
++import (
++	"context"
++	"crypto/ed25519"
++	"crypto/sha256"
++	"encoding/base64"
++	"encoding/hex"
++	"encoding/json"
++	"io"
++	"net/http"
++	"regexp"
++	"strconv"
++	"strings"
++	"time"
++
++	paymentcontract "github.com/dujiao-next/internal/modules/payment/contract"
++)
++
++var keyIDPattern = regexp.MustCompile(`^[A-Za-z0-9._-]{1,64}$`)
++var noncePattern = regexp.MustCompile(`^[A-Za-z0-9]{16,128}$`)
++var timestampPattern = regexp.MustCompile(`^[0-9]{1,12}$`)
++
++// Event carries only the verified fields needed for host payment accounting.
++type Event struct {
++	OrderNo     string      `json:"order_no"`
++	Status      int         `json:"status"`
++	FiatAmount  json.Number `json:"fiat_amount"`
++	Environment string      `json:"environment"`
++	EventID     string      `json:"event_id"`
++}
++
++// publicKey refreshes fixed-origin JWKS on expiry or an unknown signing key.
++func (c *Client) publicKey(ctx context.Context, id string, now time.Time) (ed25519.PublicKey, error) {
++	c.mu.Lock()
++	defer c.mu.Unlock()
++	if key := c.keys[id]; len(key) == ed25519.PublicKeySize && now.Before(c.keysUntil) {
++		return ed25519.PublicKey(key), nil
++	}
++	req, err := http.NewRequestWithContext(ctx, http.MethodGet, APIBaseURL+"/public/webhook-jwks", nil)
++	if err != nil {
++		return nil, paymentcontract.ErrGatewayRequestFailed
++	}
++	res, err := c.http.Do(req)
++	if err != nil {
++		return nil, paymentcontract.ErrGatewayRequestFailed
++	}
++	defer res.Body.Close()
++	if res.StatusCode != http.StatusOK {
++		return nil, paymentcontract.ErrGatewayRequestFailed
++	}
++	type jwk struct {
++		Kty string `json:"kty"`
++		Crv string `json:"crv"`
++		Alg string `json:"alg"`
++		Use string `json:"use"`
++		Kid string `json:"kid"`
++		X   string `json:"x"`
++	}
++	var doc struct {
++		Keys []jwk `json:"keys"`
++		Data struct {
++			Keys []jwk `json:"keys"`
++		} `json:"data"`
++	}
++	data, err := io.ReadAll(io.LimitReader(res.Body, 65537))
++	if err != nil || len(data) > 65536 || json.Unmarshal(data, &doc) != nil {
++		return nil, paymentcontract.ErrGatewayResponseInvalid
++	}
++	keys := doc.Keys
++	if len(keys) == 0 {
++		keys = doc.Data.Keys
++	}
++	validated := map[string][]byte{}
++	for _, key := range keys {
++		decoded, err := base64.RawURLEncoding.Strict().DecodeString(key.X)
++		if err == nil && key.Kty == "OKP" && key.Crv == "Ed25519" && key.Alg == "EdDSA" && key.Use == "sig" && keyIDPattern.MatchString(key.Kid) && len(decoded) == ed25519.PublicKeySize {
++			validated[key.Kid] = decoded
++		}
++	}
++	if len(validated) == 0 {
++		return nil, paymentcontract.ErrGatewayResponseInvalid
++	}
++	c.keys = validated
++	c.keysUntil = now.Add(5 * time.Minute)
++	if key := c.keys[id]; len(key) == ed25519.PublicKeySize {
++		return ed25519.PublicKey(key), nil
++	}
++	return nil, paymentcontract.ErrGatewaySignatureInvalid
++}
++
++// Verify authenticates the raw-body v2 audience, freshness and durable nonce before decoding the event.
++func (c *Client) Verify(ctx context.Context, cfg *Config, headers map[string]string, body []byte, now time.Time) (*Event, error) {
++	h := map[string]string{}
++	for k, v := range headers {
++		h[strings.ToLower(k)] = strings.TrimSpace(v)
++	}
++	id, stamp, nonce := h["x-webhook-key-id"], h["x-timestamp"], h["x-nonce"]
++	if len(body) > 1<<20 || h["x-webhook-signature-version"] != "v2" || !keyIDPattern.MatchString(id) || !timestampPattern.MatchString(stamp) || !noncePattern.MatchString(nonce) || h["x-webhook-merchant-id"] != cfg.MerchantID || h["x-webhook-environment"] != "production" {
++		return nil, paymentcontract.ErrGatewaySignatureInvalid
++	}
++	seconds, err := strconv.ParseInt(stamp, 10, 64)
++	if err != nil || now.Sub(time.Unix(seconds, 0)).Abs() > 5*time.Minute {
++		return nil, paymentcontract.ErrGatewaySignatureInvalid
++	}
++	sig, err := base64.RawURLEncoding.Strict().DecodeString(h["x-webhook-signature-v2"])
++	if err != nil || len(sig) != ed25519.SignatureSize {
++		return nil, paymentcontract.ErrGatewaySignatureInvalid
++	}
++	key, err := c.publicKey(ctx, id, now)
++	if err != nil {
++		return nil, err
++	}
++	canonical := strings.Join([]string{"polypay-webhook-v2", id, stamp, nonce, cfg.MerchantID, "production", string(body)}, "\n")
++	if !ed25519.Verify(key, []byte(canonical), sig) {
++		return nil, paymentcontract.ErrGatewaySignatureInvalid
++	}
++	var event Event
++	if json.Unmarshal(body, &event) != nil || event.OrderNo == "" || event.EventID == "" || event.Environment != "production" {
++		return nil, paymentcontract.ErrGatewayResponseInvalid
++	}
++	if c.consume == nil {
++		return nil, paymentcontract.ErrGatewayRequestFailed
++	}
++	digest := sha256.Sum256([]byte("v2|" + id + "|" + stamp + "|" + nonce))
++	consumed, err := c.consume(ctx, "polypay:webhook:"+hex.EncodeToString(digest[:]), 10*time.Minute)
++	if err != nil {
++		return nil, paymentcontract.ErrGatewayRequestFailed
++	}
++	if !consumed {
++		return nil, paymentcontract.ErrGatewaySignatureInvalid
++	}
++	return &event, nil
++}
+diff --git a/internal/modules/payment/transport/http/admin_channel_handler.go b/internal/modules/payment/transport/http/admin_channel_handler.go
+index d89f04d1..7cc3ee91 100644
+--- a/internal/modules/payment/transport/http/admin_channel_handler.go
++++ b/internal/modules/payment/transport/http/admin_channel_handler.go
+@@ -21,6 +21,7 @@ import (
+ const redactedPaymentConfigValue = "••••••••"
+ 
+ var sensitivePaymentConfigKeys = map[string]struct{}{
++	"api_key":              {},
+ 	"api_secret":           {},
+ 	"api_v3_key":           {},
+ 	"auth_token":           {},
+diff --git a/internal/modules/payment/transport/http/routes.go b/internal/modules/payment/transport/http/routes.go
+index c0c051bf..41495fd2 100644
+--- a/internal/modules/payment/transport/http/routes.go
++++ b/internal/modules/payment/transport/http/routes.go
+@@ -67,6 +67,7 @@ func RegisterWebhookRoutes(api gin.IRoutes, handler *WebhookHandler) {
+ 	api.POST("/payments/webhook/dujiaopay", handler.DujiaoPayWebhook)
+ 	api.POST("/payments/webhook/paypal", handler.PaypalWebhook)
+ 	api.POST("/payments/webhook/stripe", handler.StripeWebhook)
++	api.POST("/payments/webhook/polypay", handler.PolyPayWebhook)
+ }
+ 
+ // RegisterEpayRedirectRoute 注册易支付 v2 跳转表单。挂在回调限流组上，不要求用户登录。
+diff --git a/internal/modules/payment/transport/http/webhook_handler.go b/internal/modules/payment/transport/http/webhook_handler.go
+index 49058f1c..be360125 100644
+--- a/internal/modules/payment/transport/http/webhook_handler.go
++++ b/internal/modules/payment/transport/http/webhook_handler.go
+@@ -37,6 +37,7 @@ type WebhookCallbackInput struct {
+ 
+ // PaymentWebhookService webhook 处理端口。
+ type PaymentWebhookService interface {
++	HandlePolyPayWebhook(input WebhookCallbackInput) (*paymentdomain.Payment, string, error)
+ 	HandlePaypalWebhook(input WebhookCallbackInput) (*paymentdomain.Payment, string, error)
+ 	HandleStripeWebhook(input WebhookCallbackInput) (*paymentdomain.Payment, string, error)
+ 	HandleDujiaoPayWebhook(input WebhookCallbackInput) (*paymentdomain.Payment, string, error)
+@@ -466,3 +467,24 @@ func epayRedirectTokenMatch(stored, provided string) bool {
+ 	sumProvided := sha256.Sum256([]byte(provided))
+ 	return subtle.ConstantTimeCompare(sumStored[:], sumProvided[:]) == 1
+ }
++
++// PolyPayWebhook acknowledges only verified, committed processing with real HTTP status codes.
++func (h *WebhookHandler) PolyPayWebhook(c *gin.Context) {
++	var query PaypalWebhookQuery
++	if c.ShouldBindQuery(&query) != nil {
++		c.Status(http.StatusBadRequest)
++		return
++	}
++	body, err := readWebhookBody(c)
++	if err != nil {
++		c.Status(http.StatusRequestEntityTooLarge)
++		return
++	}
++	_, _, err = h.webhooks.HandlePolyPayWebhook(WebhookCallbackInput{ChannelID: query.ChannelID, Headers: collectRequestHeaders(c), Body: body, Context: c.Request.Context()})
++	if err != nil {
++		ginutil.RequestLog(c).Warnw("polypay_webhook_rejected", "channel_id", query.ChannelID, "error", err)
++		c.Status(http.StatusServiceUnavailable)
++		return
++	}
++	c.String(http.StatusOK, "OK")
++}
+diff --git a/internal/modules/payment/transport/http/webhook_handler_test.go b/internal/modules/payment/transport/http/webhook_handler_test.go
+index b5513d1f..b866a1d3 100644
+--- a/internal/modules/payment/transport/http/webhook_handler_test.go
++++ b/internal/modules/payment/transport/http/webhook_handler_test.go
+@@ -1,8 +1,9 @@
+ package paymenthttp
+ 
+ import (
+-	"encoding/json"
+ 	"errors"
++
++	"encoding/json"
+ 	"html"
+ 	"net/http"
+ 	"net/http/httptest"
+@@ -286,3 +287,34 @@ func htmlAttributeMap(tag string) map[string]string {
+ 	}
+ 	return out
+ }
++
++type nativeWebhookFixture struct {
++	PaymentWebhookService
++	err error
++}
++
++// HandlePolyPayWebhook simulates the transactional service outcome, retaining failures for upstream retries.
++func (f nativeWebhookFixture) HandlePolyPayWebhook(WebhookCallbackInput) (*paymentdomain.Payment, string, error) {
++	return nil, "", f.err
++}
++
++// TestPolyPayWebhookHTTPStatus prevents business errors being acknowledged as successful webhook delivery.
++func TestPolyPayWebhookHTTPStatus(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	for _, tt := range []struct {
++		name, path string
++		err        error
++		want       int
++	}{{"success", "/?channel_id=1", nil, 200}, {"failed commit", "/?channel_id=1", errors.New("commit failed"), 503}, {"missing channel", "/", nil, 400}} {
++		t.Run(tt.name, func(t *testing.T) {
++			handler := NewWebhookHandler(nativeWebhookFixture{err: tt.err}, nil)
++			router := gin.New()
++			router.POST("/", handler.PolyPayWebhook)
++			w := httptest.NewRecorder()
++			router.ServeHTTP(w, httptest.NewRequest(http.MethodPost, tt.path, strings.NewReader(`{}`)))
++			if w.Code != tt.want {
++				t.Fatalf("got HTTP %d, want %d", w.Code, tt.want)
++			}
++		})
++	}
++}
+-- 
+2.53.0
+

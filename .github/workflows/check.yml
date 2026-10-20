@@ -19,3 +19,54 @@ jobs:
         with:
           name: plugin-install-archive
           path: dist/*.zip
+
+  native:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: plugin
+      - uses: actions/checkout@v4
+        with:
+          repository: dujiao-next/dujiao-next
+          ref: 41b86260dc9a60269526057eed8d915844ceb3a3
+          path: host
+      - name: Verify recorded patch and baseline
+        run: |
+          python3 - <<'PYCODE'
+          import hashlib, json, pathlib, subprocess
+          plugin = pathlib.Path('plugin/native')
+          doc = json.loads((plugin / 'manifest.json').read_text())
+          assert subprocess.check_output(['git', '-C', 'host', 'rev-parse', 'HEAD'], text=True).strip() == doc['baseline']
+          patch = plugin / 'patches/0001-native-polypay.patch'
+          assert hashlib.sha256(patch.read_bytes()).hexdigest() == doc['patch_sha256']
+          subprocess.run(['git', '-C', 'host', 'apply', '--check', str(patch.resolve())], check=True)
+          subprocess.run(['git', '-C', 'host', 'apply', str(patch.resolve())], check=True)
+          PYCODE
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: host/go.mod
+          cache-dependency-path: host/go.sum
+      - name: Verify native host backend
+        working-directory: host
+        env:
+          CGO_ENABLED: '1'
+        run: |
+          go vet ./...
+          go test ./...
+          go test -race ./internal/modules/payment/infrastructure/gateway/polypay ./internal/modules/payment/infrastructure/gateway/adapters/polypay
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.34.3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Verify native admin and storefront
+        working-directory: host
+        run: |
+          (cd frontend/admin && pnpm install --frozen-lockfile && pnpm run test && pnpm run build:fullstack)
+          (cd frontend/user && pnpm install --frozen-lockfile && pnpm run test && pnpm run build)
+          mkdir -p internal/web/dist/admin internal/web/dist/user
+          cp -a frontend/admin/dist/. internal/web/dist/admin/
+          cp -a frontend/user/dist/. internal/web/dist/user/
+          CGO_ENABLED=0 go build -tags release,fullstack -o /tmp/dujiao-next-native ./cmd/server
