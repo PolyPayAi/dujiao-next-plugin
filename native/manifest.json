@@ -1,9 +1,9 @@
 {
   "integration": "native-polypay",
-  "version": "0.2.0-preview",
+  "version": "0.2.1-preview",
   "upstream": "https://github.com/dujiao-next/dujiao-next",
   "baseline": "41b86260dc9a60269526057eed8d915844ceb3a3",
-  "host_commit": "f3cb1a81b974febcbbc8882147bc05a95d047eca",
+  "host_commit": "2231f1118c9c491732b57dbbfc785da08f5c65ce",
   "patch_sha256": "fda90f906574aceb3cf0b8eb415ac72720cb92f5f07c0ca4d6cc988080802acd",
   "license": "GPL-3.0 (host-source patch; see native/LICENSE)",
   "database_schema_changes": false,
@@ -44,28 +44,32 @@
     "user": "pnpm run test (62 tests); pnpm run build passed",
     "live_protocol": "2026-10-20 production API create/detail/cancel passed; USD 0.14 order cancelled, no payment",
     "real_payment_and_public_webhook": "not performed",
-    "host_admin_channel_creation": "pending existing compliance acknowledgment",
+    "host_admin_channel_creation": "Configured and enabled channel 1 after site-owner declaration",
     "merchant_binding": "Production API response merchant ID must match configured merchant; verified create/detail/cancel again without payment",
-    "patch_reproduction": "Both ordered patches recreate the exact final committed host tree"
+    "patch_reproduction": "Ordered patches reproduce the final committed host tree",
+    "host_storefront_checkout": "2026-10-20 actual guest create-and-pay for CNY 1 returned HTTPS PolyPay checkout; admin cancellation closed remote payment and restored stock; no payment",
+    "checkout_amount_regression": "Unselected checkout uses amount as USD; selected method uses fiat_amount; zero fiat never authorizes paid token quantities"
   },
   "lan_deployment": {
     "date": "2026-10-20",
-    "host_commit": "0d5ff86",
-    "image": "dujiao-next:polypay-native-0.2.0",
-    "binary_sha256": "db54a1e2c1e53e4883d880ebd0029ae655c877f22d30d4765d2b2b9643abdec2",
+    "host_commit": "8183f41",
+    "image": "dujiao-next:polypay-native-0.2.1",
+    "binary_sha256": "08d1cb44d43f0780d4ff2b7b9a47a7a06464e7b4f19f4444ebd76e3ecf66adf9",
     "admin_page_http": 200,
     "native_admin_assets": true,
     "callback_without_required_channel_http": 400,
     "frontend_secret_scan": "passed",
-    "channel_creation": "pending site-owner compliance acknowledgment",
+    "channel_creation": "channel 1 configured and active",
     "host_commits": [
       "caf0e02",
-      "0d5ff86"
+      "0d5ff86",
+      "8183f41"
     ]
   },
   "host_commits": [
     "b353044b3f2633a759405b9392e6d7dfcc3f2d68",
-    "f3cb1a81b974febcbbc8882147bc05a95d047eca"
+    "f3cb1a81b974febcbbc8882147bc05a95d047eca",
+    "2231f1118c9c491732b57dbbfc785da08f5c65ce"
   ],
   "patches": [
     {
@@ -75,6 +79,10 @@
     {
       "file": "patches/0002-verify-merchant-binding.patch",
       "sha256": "08ec76b0919d3150548f3d1b883242d03aab2dd11c1167160d93305802b69b5f"
+    },
+    {
+      "file": "patches/0003-fix-checkout-USD-state.patch",
+      "sha256": "bcc7b1a0fb8b755695d7641c91eac276f389639ccb5309dcab604c8f18d5192a"
     }
   ]
 }

@@ -4,7 +4,7 @@ from zipfile import ZipFile, ZIP_DEFLATED
 
 root = Path(__file__).resolve().parent.parent
 name = root.name
-output = root / 'dist' / (name + '-0.2.0-preview.zip')
+output = root / 'dist' / (name + '-0.2.1-preview.zip')
 output.parent.mkdir(exist_ok=True)
 allowed = ['Dockerfile', '.dockerignore', 'deploy', 'src', 'public', 'vendor', 'bin', 'bootstrap.php', 'config.example.php', 'README.md', 'README.zh.md', 'LICENSE', 'native']
 with ZipFile(output, 'w', ZIP_DEFLATED) as archive:

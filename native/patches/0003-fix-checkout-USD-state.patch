@@ -1,0 +1,202 @@
+From 2231f1118c9c491732b57dbbfc785da08f5c65ce Mon Sep 17 00:00:00 2001
+From: kiddo <kiddo@11.com>
+Date: Tue, 20 Oct 2026 15:20:11 -0400
+Subject: [PATCH] fix(payment): read USD amount from unselected PolyPay
+ checkout state
+
+---
+ .../gateway/adapters/polypay/adapter.go       | 30 +++++-
+ .../gateway/adapters/polypay/adapter_test.go  | 91 ++++++++++++++++++-
+ .../infrastructure/gateway/polypay/client.go  |  3 +
+ 3 files changed, 119 insertions(+), 5 deletions(-)
+
+diff --git a/internal/modules/payment/infrastructure/gateway/adapters/polypay/adapter.go b/internal/modules/payment/infrastructure/gateway/adapters/polypay/adapter.go
+index c98a28c1..5e5d39b7 100644
+--- a/internal/modules/payment/infrastructure/gateway/adapters/polypay/adapter.go
++++ b/internal/modules/payment/infrastructure/gateway/adapters/polypay/adapter.go
+@@ -69,8 +69,8 @@ func (a *adapter) CreatePayment(ctx context.Context, raw jsonmap.JSON, input pay
+ 	if err != nil {
+ 		return nil, err
+ 	}
+-	actual, err := decimal.NewFromString(order.FiatAmount.String())
+-	if err != nil || !actual.Equal(amount) {
++	actual, err := orderUSD(order)
++	if err != nil || !actual.Decimal.Equal(amount) {
+ 		return nil, paymentcontract.ErrGatewayResponseInvalid
+ 	}
+ 	snapshot.ProviderRef = order.TradeID
+@@ -80,7 +80,7 @@ func (a *adapter) CreatePayment(ctx context.Context, raw jsonmap.JSON, input pay
+ 
+ // orderResult maps only authenticated remote states; manual recharge never authorizes a purchase.
+ func orderResult(order *polypay.Order) (*paymentcontract.GatewayQueryResult, error) {
+-	amount, err := parseUSD(order.FiatAmount.String())
++	amount, err := orderUSD(order)
+ 	if err != nil {
+ 		return nil, paymentcontract.ErrGatewayResponseInvalid
+ 	}
+@@ -153,7 +153,7 @@ var _ paymentcontract.GatewayCanceller = (*adapter)(nil)
+ // parseUSD validates the fixed fiat precision before constructing the host money value.
+ func parseUSD(raw string) (money.Amount, error) {
+ 	value, err := decimal.NewFromString(raw)
+-	if err != nil || !value.Equal(value.Round(2)) {
++	if err != nil || !value.IsPositive() || !value.Equal(value.Round(2)) {
+ 		return money.Amount{}, paymentcontract.ErrGatewayResponseInvalid
+ 	}
+ 	return money.FromDecimal(value), nil
+@@ -172,3 +172,25 @@ func (a *adapter) PreparePayment(raw jsonmap.JSON, input paymentcontract.Gateway
+ 	}
+ 	return &paymentcontract.GatewayCreateResult{AmountSent: amount.StringFixed(2), CurrencySent: "USD", Payload: jsonmap.JSON{"exchange_rate": rate.String(), "original_amount": input.Amount.Decimal.StringFixed(2), "original_currency": input.Currency, "polypay_merchant_id": cfg.MerchantID, "polypay_order_no": input.OrderNo, paymentcontract.GatewayPayloadFiatCurrencySent: "USD"}}, nil
+ }
++
++// orderUSD follows the API state machine: unselected checkout Amount is USD;
++// once a method is selected, Amount is a token quantity and only FiatAmount is USD.
++// Closing an unselected checkout retains its original USD Amount and empty method.
++func orderUSD(order *polypay.Order) (money.Amount, error) {
++	if order == nil {
++		return money.Amount{}, paymentcontract.ErrGatewayResponseInvalid
++	}
++	unselected := order.Currency == "" && order.Network == ""
++	switch order.Status {
++	case 0:
++		if !unselected {
++			return money.Amount{}, paymentcontract.ErrGatewayResponseInvalid
++		}
++		return parseUSD(order.Amount.String())
++	case 3, 4:
++		if unselected {
++			return parseUSD(order.Amount.String())
++		}
++	}
++	return parseUSD(order.FiatAmount.String())
++}
+diff --git a/internal/modules/payment/infrastructure/gateway/adapters/polypay/adapter_test.go b/internal/modules/payment/infrastructure/gateway/adapters/polypay/adapter_test.go
+index 8e7745b0..02c12272 100644
+--- a/internal/modules/payment/infrastructure/gateway/adapters/polypay/adapter_test.go
++++ b/internal/modules/payment/infrastructure/gateway/adapters/polypay/adapter_test.go
+@@ -1,7 +1,13 @@
+ package polypayadapter
+ 
+ import (
++	"context"
+ 	"encoding/json"
++	"fmt"
++	"io"
++	"net/http"
++	"net/http/httptest"
++	"net/url"
+ 	"testing"
+ 
+ 	paymentcontract "github.com/dujiao-next/internal/modules/payment/contract"
+@@ -20,7 +26,14 @@ func TestFiatSnapshotAndRemoteStates(t *testing.T) {
+ 		t.Fatalf("invalid snapshot %+v %v", snapshot, err)
+ 	}
+ 	for _, status := range []int{0, 1, 2, 3, 4, 5, 6, 7, 99} {
+-		result, err := orderResult(&polypay.Order{TradeID: "trade", OrderNo: "DJP-test", Status: status, FiatAmount: json.Number("12.32")})
++		order := &polypay.Order{TradeID: "trade", OrderNo: "DJP-test", Status: status, FiatAmount: json.Number("12.32"), Currency: "USDT", Network: "ethereum"}
++		if status == 0 {
++			order.FiatAmount = json.Number("0")
++			order.Amount = json.Number("12.32")
++			order.Currency = ""
++			order.Network = ""
++		}
++		result, err := orderResult(order)
+ 		if status == 5 || status == 99 {
+ 			if err == nil {
+ 				t.Fatalf("unsafe status %d accepted", status)
+@@ -32,3 +45,79 @@ func TestFiatSnapshotAndRemoteStates(t *testing.T) {
+ 		}
+ 	}
+ }
++
++type checkoutFixtureTransport struct {
++	base   http.RoundTripper
++	target *url.URL
++}
++
++// RoundTrip routes the fixed production endpoint to a local TLS contract fixture.
++func (r checkoutFixtureTransport) RoundTrip(req *http.Request) (*http.Response, error) {
++	clone := req.Clone(req.Context())
++	clone.URL.Scheme = r.target.Scheme
++	clone.URL.Host = r.target.Host
++	return r.base.RoundTrip(clone)
++}
++
++// TestHostedCheckoutUnselectedAmount exercises actual create/query/cancel responses before method selection.
++func TestHostedCheckoutUnselectedAmount(t *testing.T) {
++	for _, wrongAmount := range []bool{false, true} {
++		t.Run(fmt.Sprint(wrongAmount), func(t *testing.T) {
++			status := 0
++			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++				switch r.URL.Path {
++				case "/api/v1/pay/order/checkout":
++					io.WriteString(w, `{"code":0,"data":{"checkout_url":"https://checkout.polypay.ai/pay/trade-test"}}`)
++				case "/api/v1/pay/order/detail":
++					total := "0.14"
++					if wrongAmount {
++						total = "0.15"
++					}
++					fmt.Fprintf(w, `{"code":0,"data":{"mch_id":"MCH-test","trade_id":"trade-test","mch_order_id":"DJP-test","environment":"production","status":%d,"fiat_amount":0,"amount":%s,"currency":"","network":""}}`, status, total)
++				case "/api/v1/pay/order/cancel":
++					status = 4
++					io.WriteString(w, `{"code":0,"data":{}}`)
++				default:
++					w.WriteHeader(404)
++				}
++			}))
++			defer server.Close()
++			transport := server.Client()
++			target, _ := url.Parse(server.URL)
++			transport.Transport = checkoutFixtureTransport{transport.Transport, target}
++			a := &adapter{client: polypay.NewClient(transport, nil)}
++			raw := jsonmap.JSON{"api_key": "synthetic", "merchant_id": "MCH-test", "usd_rate": "0.14", "notify_url": "http://192.168.1.2/hook", "return_url": "http://192.168.1.2/pay", "force_https": false}
++			result, err := a.CreatePayment(context.Background(), raw, paymentcontract.GatewayCreateInput{OrderNo: "DJP-test", Amount: money.FromDecimal(decimal.NewFromInt(1)), Currency: "CNY", ChannelType: "polypay", Extra: jsonmap.JSON{"channel_id": uint(1)}})
++			if wrongAmount {
++				if err == nil {
++					t.Fatal("mismatched checkout USD accepted")
++				}
++				return
++			}
++			if err != nil {
++				t.Fatalf("hosted checkout rejected before choosing a method: %v", err)
++			}
++			if result.AmountSent != "0.14" || result.CurrencySent != "USD" || result.ProviderRef != "trade-test" {
++				t.Fatal("incorrect checkout snapshot")
++			}
++			pending, err := a.QueryPayment(context.Background(), raw, result.ProviderRef)
++			if err != nil || pending.Status != "pending" || pending.Amount.Decimal.StringFixed(2) != "0.14" {
++				t.Fatalf("pending query: %+v %v", pending, err)
++			}
++			closed, err := a.CancelPayment(context.Background(), raw, result.ProviderRef)
++			if err != nil || closed.Status != "expired" || closed.Amount.Decimal.StringFixed(2) != "0.14" {
++				t.Fatalf("unselected cancellation: %+v %v", closed, err)
++			}
++		})
++	}
++}
++
++// TestPaidTokenAmountNeverSubstitutesFiat prevents token quantities from authorizing a USD purchase.
++func TestPaidTokenAmountNeverSubstitutesFiat(t *testing.T) {
++	for _, status := range []int{1, 2, 6, 7} {
++		_, err := orderResult(&polypay.Order{Status: status, FiatAmount: json.Number("0"), Amount: json.Number("1000"), Currency: "ETH", Network: "ethereum"})
++		if err == nil {
++			t.Fatalf("token amount accepted as USD for status %d", status)
++		}
++	}
++}
+diff --git a/internal/modules/payment/infrastructure/gateway/polypay/client.go b/internal/modules/payment/infrastructure/gateway/polypay/client.go
+index 5533569e..b956057b 100644
+--- a/internal/modules/payment/infrastructure/gateway/polypay/client.go
++++ b/internal/modules/payment/infrastructure/gateway/polypay/client.go
+@@ -47,6 +47,9 @@ type Order struct {
+ 	Status      int         `json:"status"`
+ 	Environment string      `json:"environment"`
+ 	FiatAmount  json.Number `json:"fiat_amount"`
++	Amount      json.Number `json:"amount"`
++	Currency    string      `json:"currency"`
++	Network     string      `json:"network"`
+ }
+ 
+ // request performs a bounded merchant request without reflecting keys or response bodies into errors.
+-- 
+2.53.0
+

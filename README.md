@@ -1,6 +1,6 @@
 # PolyPay for Dujiao-Next
 
-> **Native PolyPay integration (0.2.0 preview):** use the host-source patch in [native/](native/README.zh.md) to add a real PolyPay provider to the admin dropdown. Rebuild Dujiao-Next after applying the patch. Baseline, complete changed-file list, SHA-256, tests and rollback instructions are recorded in `native/manifest.json`. This patch is GPL-3.0 under the host license. The EPay bridge documented below is the older optional integration and is not needed for native mode.
+> **Native PolyPay integration (0.2.1 preview):** use the host-source patch in [native/](native/README.zh.md) to add a real PolyPay provider to the admin dropdown. Rebuild Dujiao-Next after applying the patch. Baseline, complete changed-file list, SHA-256, tests and rollback instructions are recorded in `native/manifest.json`. This patch is GPL-3.0 under the host license. The EPay bridge documented below is the older optional integration and is not needed for native mode.
 
 
 Standalone EPay v1 redirect bridge for PolyPay Hosted Checkout. No Dujiao-Next source files, database tables or binaries are changed. This is a separately hosted PHP service, **not** a ZIP that Dujiao-Next can dynamically load.
