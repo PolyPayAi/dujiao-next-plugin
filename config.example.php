@@ -6,7 +6,7 @@ return [
     'api_key' => '',
     'api_url' => 'https://api.polypay.ai',
     'merchant_id' => '',
-    'environment' => 'sandbox',
+    'environment' => 'production',
     'base_url' => 'https://bridge.example.com',
     'notify_url' => 'https://shop.example.com/api/v1/payments/callback',
     'return_url' => 'https://shop.example.com/pay',

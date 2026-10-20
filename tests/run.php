@@ -13,7 +13,7 @@ function rejects(callable $action): void {
 }
 $dir = sys_get_temp_dir() . '/polypay-bridge-test-' . bin2hex(random_bytes(8));
 $store = new Store($dir);
-$config = ['pid' => 'test', 'epay_key' => str_repeat('k', 32), 'merchant_id' => 'MCH_TEST', 'environment' => 'sandbox',
+$config = ['pid' => 'test', 'epay_key' => str_repeat('k', 32), 'merchant_id' => 'MCH_TEST', 'environment' => 'production',
     'base_url' => 'https://bridge.example', 'notify_url' => 'https://shop.example/api/v1/payments/callback',
     'return_url' => 'https://shop.example/pay', 'usd_rate' => '0.14'];
 $creates = 0; $deliveries = 0; $ack = false; $remoteStatus = 1; $cancelCalls = 0; $ambiguous = false;
@@ -48,8 +48,8 @@ rejects(function () use ($wrongMerchant, $store, $api, $notify, $input) { (new B
 $bad = $input; $bad['money'] = '9.00'; rejects(function () use ($bridge, $bad) { $bridge->checkout($bad); });
 $bad = $input; $bad['notify_url'] = 'https://attacker.example'; $bad['sign'] = Bridge::sign($bad, $config['epay_key']);
 rejects(function () use ($bridge, $bad) { $bridge->checkout($bad); });
-$event = ['order_no' => $record['mch_order_id'], 'fiat_amount' => '1.40', 'status' => 2, 'event_id' => 'evt1', 'environment' => 'sandbox'];
-foreach (['status' => 5, 'fiat_amount' => '0.01', 'order_no' => 'OTHER', 'environment' => 'production'] as $field => $value) {
+$event = ['order_no' => $record['mch_order_id'], 'fiat_amount' => '1.40', 'status' => 2, 'event_id' => 'evt1', 'environment' => 'production'];
+foreach (['status' => 5, 'fiat_amount' => '0.01', 'order_no' => 'OTHER', 'environment' => 'sandbox'] as $field => $value) {
     $bad = $event; $bad[$field] = $value;
     rejects(function () use ($bridge, $bad) { $bridge->paid('ORDER1', $bad); });
 }
@@ -80,13 +80,13 @@ $provider = new class($public) implements \PolyPay\WebhookPublicKeyProviderInter
     /** Select only the fixture key ID. */
     public function getPublicKey(string $id): string { if ($id !== 'test') throw new RuntimeException('Unknown key'); return $this->key; }
 };
-$verifier = new \PolyPay\WebhookV2Handler('MCH_TEST', 'sandbox', new \PolyPay\Nonce\FileNonceStorage($dir . '/nonces'), $provider);
+$verifier = new \PolyPay\WebhookV2Handler('MCH_TEST', 'production', new \PolyPay\Nonce\FileNonceStorage($dir . '/nonces'), $provider);
 $body = json_encode($event); $timestamp = (string)time(); $nonce = bin2hex(random_bytes(16));
-$payload = implode("\n", ['polypay-webhook-v2', 'test', $timestamp, $nonce, 'MCH_TEST', 'sandbox', $body]);
+$payload = implode("\n", ['polypay-webhook-v2', 'test', $timestamp, $nonce, 'MCH_TEST', 'production', $body]);
 $signature = rtrim(strtr(base64_encode(sodium_crypto_sign_detached($payload, $secret)), '+/', '-_'), '=');
 $headers = ['X-Webhook-Signature-Version' => 'v2', 'X-Webhook-Key-Id' => 'test', 'X-Timestamp' => $timestamp,
-    'X-Nonce' => $nonce, 'X-Webhook-Merchant-Id' => 'MCH_TEST', 'X-Webhook-Environment' => 'sandbox', 'X-Webhook-Signature-V2' => $signature];
-$bad = $headers; $bad['X-Webhook-Environment'] = 'production'; rejects(function () use ($verifier, $body, $bad) { $verifier->verify($body, $bad); });
+    'X-Nonce' => $nonce, 'X-Webhook-Merchant-Id' => 'MCH_TEST', 'X-Webhook-Environment' => 'production', 'X-Webhook-Signature-V2' => $signature];
+$bad = $headers; $bad['X-Webhook-Environment'] = 'sandbox'; rejects(function () use ($verifier, $body, $bad) { $verifier->verify($body, $bad); });
 rejects(function () use ($verifier, $body, $headers) { $verifier->verify($body . ' ', $headers); });
 $bad = $headers; $bad['X-Timestamp'] = (string)(time() - 600); rejects(function () use ($verifier, $body, $bad) { $verifier->verify($body, $bad); });
 check($verifier->verify($body, $headers) === $event, 'Valid v2 vector');

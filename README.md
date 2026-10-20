@@ -2,7 +2,7 @@
 
 Standalone EPay v1 redirect bridge for PolyPay Hosted Checkout. No Dujiao-Next source files, database tables or binaries are changed. This is a separately hosted PHP service, **not** a ZIP that Dujiao-Next can dynamically load.
 
-Status: **0.1.0 preview — protocol tests passed; real host/Sandbox acceptance is still required.** Source compatibility reviewed against Dujiao-Next `41b86260` (main). Other versions must be verified before use.
+Status: **0.1.0 preview — protocol tests passed; real host acceptance is still required.** Source compatibility reviewed against Dujiao-Next `41b86260` (main). Other versions must be verified before use.
 
 [中文安装说明](README.zh.md)
 
@@ -15,7 +15,7 @@ PHP >= 7.4 with curl, json, bcmath and sodium; HTTPS; a private writable directo
 1. Extract the complete release into a directory such as `/opt/polypay-dujiao-next`. Set the web document root to its **public/** directory only. Do not expose `src`, `vendor`, `bin`, config or storage over HTTP.
 2. Copy `config.example.php` to a private location, e.g. `/etc/polypay-dujiao-next.php`. Set `POLYPAY_BRIDGE_CONFIG` in the PHP-FPM pool to that absolute filename. Keep its permissions restricted to the PHP worker and administrator.
 3. Generate an independent EPay key with `php -r 'echo bin2hex(random_bytes(32)), PHP_EOL;'`. This is the bridge authentication key; it is **not** your PolyPay API Key.
-4. Configure the PolyPay API Key, expected merchant ID and environment. Start with a Sandbox key (`sk_sandbox_...`) and `environment=sandbox`; use the same API host. Keep the key's environment consistent with the configured audience.
+4. Configure the PolyPay API Key, expected merchant ID and environment. Use the current live API Key and `environment=production`. This integration does not offer a Sandbox mode.
 5. Configure `base_url` as the bridge HTTPS origin, `notify_url` as the exact Dujiao-Next callback URL, and `return_url` as the exact storefront return URL **without a query string**. Custom callback paths must match on both sides.
 6. Set `usd_rate` to USD per one unit of the amount Dujiao-Next submits. Example: `0.14` means 10 submitted currency units become USD 1.40. Set `1` for USD. Prices and rates are snapshotted before order creation; later config changes cannot reprice an existing attempt.
 7. Create private persistent `storage_dir` and give only the PHP worker write access. Back it up together with config. Loss of mapping records prevents automatic fulfillment.
@@ -81,7 +81,7 @@ php tests/run.php
 python3 scripts/package.py
 ```
 
-Tests use mock API/host transports and local Ed25519 keys. They make no live payments. Before production, use a real Sandbox key to verify an actual order, a signed callback and one fulfillment, duplicate/invalid callbacks, changed rates, host delivery failure/retry, order expiry and cancellation. Verify both registered and guest purchases plus wallet recharge on your exact host version. No real Sandbox end-to-end acceptance has been claimed by this release.
+Tests use mock API/host transports and local Ed25519 keys. They make no live payments. Before enabling customer traffic, first verify order creation and cancellation without payment. With explicit authorization for a small real payment, verify a signed callback and one fulfillment, duplicate/invalid callbacks, changed rates, host delivery failure/retry, order expiry and cancellation. Verify both registered and guest purchases plus wallet recharge on your exact host version. Real-payment end-to-end acceptance has not been completed.
 
 Installation does not call PolyPay plugin activation: the current backend plugin-type allowlist does not include this platform yet.
 

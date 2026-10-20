@@ -14,7 +14,7 @@ class Bridge
         foreach (['pid', 'epay_key', 'merchant_id', 'environment', 'base_url', 'notify_url', 'return_url', 'usd_rate'] as $key) {
             if (!is_string($config[$key] ?? null) || $config[$key] === '') throw new \RuntimeException('Missing configuration: ' . $key);
         }
-        if (strlen($config['epay_key']) < 32 || !in_array($config['environment'], ['production', 'sandbox'], true)) {
+        if (strlen($config['epay_key']) < 32 || $config['environment'] !== 'production') {
             throw new \RuntimeException('Invalid bridge key or environment');
         }
         foreach (['base_url', 'notify_url', 'return_url'] as $key) Support::url($config[$key]);

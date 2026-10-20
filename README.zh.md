@@ -2,7 +2,7 @@
 
 不修改 Dujiao-Next 源码、数据库结构或二进制程序。在商城后台使用已有的「易支付 v1 → 跳转支付」渠道接入。桥接本身需要独立部署，不能作为 ZIP 上传给 Dujiao-Next 动态加载。
 
-版本：**0.1.0 预览版；协议测试已通过，尚待真实宿主和 Sandbox 验收。** 源码核对基准为 Dujiao-Next `41b86260`。完整参数和运维说明见 [README](README.md)。
+版本：**0.1.0 预览版；协议测试已通过，尚待真实宿主验收。** 源码核对基准为 Dujiao-Next `41b86260`。完整参数和运维说明见 [README](README.md)。
 
 ## 安装
 
@@ -10,14 +10,14 @@
 2. 将 `config.example.php` 复制到网站根目录以外，例如 `/etc/polypay-dujiao-next.php`。在 PHP-FPM 配置环境变量 `POLYPAY_BRIDGE_CONFIG`，指向这个私有文件。
 3. PHP 需要 curl、json、bcmath、sodium。使用单实例和持久化私有存储；`storage_dir` 必须在网站根目录以外，不能放进临时容器文件系统。
 4. 生成独立的 `epay_key`：`php -r 'echo bin2hex(random_bytes(32)), PHP_EOL;'`。这是桥接与商城的认证密钥，不是 PolyPay API Key。
-5. 填写 Sandbox API Key、商户 ID、`environment=sandbox`、桥接 HTTPS 地址及商城回调/返回地址。
+5. 填写 正式 API Key、商户 ID、`environment=production`、桥接 HTTPS 地址及商城回调/返回地址。
 6. `usd_rate` 表示商城提交金额每一单位折合多少 USD。例如 `0.14` 表示 10 元换算为 1.40 USD；商城提交 USD 时填 `1`。下单前保存汇率快照，配置变更不会影响旧订单。
 
 ## Docker 部署
 
 仓库附带 `Dockerfile` 和 `deploy/compose.yml`。设置 `POLYPAY_BRIDGE_LISTEN_IP`（例如 `127.0.0.1`）及私有配置路径 `POLYPAY_BRIDGE_CONFIG_FILE` 后，执行 `docker compose -f deploy/compose.yml up -d --build`。
 
-私有配置中的 `storage_dir` 填 `/var/lib/polypay-dujiao-next`；映射存储由持久化数据卷保存。配置文件需允许容器 PHP 用户（UID 33）读取，同时限制父目录权限。18083 端口提供 HTTP，由 HTTPS 反向代理转发，配置中的公网地址仍必须使用 HTTPS。实际部署前先明确公网域名和 Sandbox 商户。
+私有配置中的 `storage_dir` 填 `/var/lib/polypay-dujiao-next`；映射存储由持久化数据卷保存。配置文件需允许容器 PHP 用户（UID 33）读取，同时限制父目录权限。18083 端口提供 HTTP，由 HTTPS 反向代理转发，配置中的公网地址仍必须使用 HTTPS。实际部署前先明确公网域名和 正式商户。
 
 ## 商城后台
 
@@ -45,4 +45,4 @@ CLI 同样需要 `POLYPAY_BRIDGE_CONFIG`。取消前后都会查单；若付款�
 
 ## 验证与打包
 
-执行 `php tests/run.php` 和 `python3 scripts/package.py`。正式使用前，使用真实 Sandbox 验证注册用户、游客购买、余额充值、发货、重复/非法回调、金额校验、投递失败重试、过期及取消；当前测试不代表真实联调通过。
+执行 `php tests/run.php` 和 `python3 scripts/package.py`。正式使用前，先验证下单和取消，不进行付款；经明确授权的小额真实付款后，再验证注册用户、游客购买、余额充值、发货、重复/非法回调、金额校验、投递失败重试、过期及取消；当前测试不代表真实联调通过。
