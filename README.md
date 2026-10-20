@@ -1,26 +1,17 @@
 # PolyPay for Dujiao-Next
 
-## AI-assisted setup (Skill)
+## Integrate with AI
 
-Use the bundled [polypay-dujiao-next skill](skills/polypay-dujiao-next/SKILL.md) with Codex to install, configure, upgrade, or troubleshoot this integration. It uses the native host-source patches and records host changes.
-
-Install with Codex’s built-in skill installer:
-
-```bash
-python3 "${CODEX_HOME:-$HOME/.codex}/skills/.system/skill-installer/scripts/install-skill-from-github.py" \
-  --repo PolyPayAi/dujiao-next-plugin \
-  --ref feat/standalone-payments \
-  --path skills/polypay-dujiao-next
-```
-
-The skill is currently on `feat/standalone-payments`; keep the `--ref` argument. If already installed, review the existing skill before replacing it. On your next Codex turn, invoke it with the actual local paths:
+Paste this prompt into your AI coding tool (Claude Code, Cursor, Codex, etc.):
 
 ```text
-$polypay-dujiao-next
-Integrate the native PolyPay channel into /path/to/dujiao-next. Plugin source is at /path/to/dujiao-next-plugin. Read merchant credentials from the private file I specify. Check version compatibility, record host patches, build, and verify checkout creation and cancellation without paying.
+Install and use the PolyPay integration Skill for Dujiao-Next:
+https://github.com/PolyPayAi/dujiao-next-plugin/tree/feat/standalone-payments/skills/polypay-dujiao-next
+
+Then integrate the native PolyPay payment channel into this Dujiao-Next project, configure it, and verify checkout creation and cancellation.
 ```
 
-For another AI tool, ask it to read the linked `SKILL.md` first. The skill is operational guidance; it does not install the payment integration merely by being added to Codex.
+[View the Skill guide](skills/polypay-dujiao-next/SKILL.md)
 
 ## Integration overview
 

@@ -1,26 +1,17 @@
 # Dujiao-Next 的 PolyPay 独立支付桥接
 
-## AI 接入（Skill）
+## 使用 AI 快速接入
 
-提供 [polypay-dujiao-next skill](skills/polypay-dujiao-next/SKILL.md)，可让 Codex 协助安装、配置、升级及排错。默认使用原生源码补丁接入，并记录宿主源码改动。
-
-使用 Codex 自带的 skill 安装器安装：
-
-```bash
-python3 "${CODEX_HOME:-$HOME/.codex}/skills/.system/skill-installer/scripts/install-skill-from-github.py" \
-  --repo PolyPayAi/dujiao-next-plugin \
-  --ref feat/standalone-payments \
-  --path skills/polypay-dujiao-next
-```
-
-当前发布在 `feat/standalone-payments`，请保留 `--ref` 参数。若已安装同名 skill，先核对现有版本再更新。安装后下一轮对话可这样调用，将路径换成实际值：
+复制下面的提示词，发送给 Claude Code、Cursor、Codex 等 AI 编程工具：
 
 ```text
-$polypay-dujiao-next
-将原生 PolyPay 渠道接入 /path/to/dujiao-next，插件源码在 /path/to/dujiao-next-plugin。商户凭据从我指定的私有文件读取。完成版本核对、宿主补丁记录、构建以及建单和取消验证，不进行实际付款。
+请安装并使用 Dujiao-Next 的 PolyPay 接入 Skill：
+https://github.com/PolyPayAi/dujiao-next-plugin/tree/feat/standalone-payments/skills/polypay-dujiao-next
+
+然后为当前 Dujiao-Next 项目接入原生 PolyPay 支付渠道，完成配置及建单、取消验证。
 ```
 
-使用其他 AI 工具时，可让它先读取上述 `SKILL.md` 再执行接入。安装 skill 只添加操作指引，不会自动修改或部署商城。
+[查看 Skill 说明](skills/polypay-dujiao-next/SKILL.md)
 
 ## 插件概览
 
