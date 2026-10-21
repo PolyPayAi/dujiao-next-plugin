@@ -3,3 +3,4 @@
 /storage/
 /dist/
 *.log
+__pycache__/

@@ -1,6 +1,6 @@
 ---
 name: polypay-dujiao-next
-description: Install, configure, upgrade, or troubleshoot the native PolyPay payment channel in Dujiao-Next using the versioned host-source patches in PolyPayAi/dujiao-next-plugin. Use for Dujiao-Next checkout, payment-channel configuration, callbacks, reconciliation, or cancellation; use the legacy EPay bridge only when the user explicitly selects it.
+description: Install, configure, upgrade, or troubleshoot the native PolyPay payment channel in Dujiao-Next using the versioned host-source patches in PolyPayAi/dujiao-next-plugin. Use for Dujiao-Next checkout, payment-channel configuration, callbacks, reconciliation, or cancellation.
 ---
 
 # PolyPay for Dujiao-Next
@@ -13,7 +13,7 @@ Use the user's plugin checkout and host checkout. If the plugin source is absent
 
 The installed skill is independent of the repository: paths below are relative to the **plugin checkout**, not to this skill's installation directory.
 
-Read `native/README.zh.md` and `native/manifest.json` before native work. They contain the supported upstream baseline, ordered patch list, SHA-256 checksums, host-source change list, build commands, and rollback procedure. Read the root README's EPay section only for an explicitly requested bridge deployment. For host changes, read the host's `AGENTS.md` and relevant implementation.
+Read `native/README.zh.md` and `native/manifest.json` before native work. They contain the supported upstream baseline, ordered patch list, SHA-256 checksums, host-source change list, build commands, and rollback procedure. For host changes, read the host's `AGENTS.md` and relevant implementation.
 
 ## Apply and record host changes
 
