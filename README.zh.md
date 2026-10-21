@@ -12,7 +12,7 @@
 
 ```text
 请安装并使用 Dujiao-Next 的 PolyPay 接入 Skill：
-https://github.com/PolyPayAi/dujiao-next-plugin/tree/feat/standalone-payments/skills/polypay-dujiao-next
+https://github.com/PolyPayAi/dujiao-next-plugin/tree/master/skills/polypay-dujiao-next
 
 然后为当前 Dujiao-Next 项目接入原生 PolyPay 支付渠道，完成配置及建单、取消验证。
 ```

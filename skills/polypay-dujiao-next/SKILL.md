@@ -9,7 +9,7 @@ Deliver a native **PolyPay** provider in the host payment-channel dropdown. This
 
 ## Locate the maintained source
 
-Use the user's plugin checkout and host checkout. If the plugin source is absent, retrieve `https://github.com/PolyPayAi/dujiao-next-plugin` into a new task directory. The native integration and this skill are currently published on `feat/standalone-payments`; inspect remote refs rather than assuming they are on the default branch. Do not overwrite a populated directory.
+Use the user's plugin checkout and host checkout. If the plugin source is absent, retrieve `https://github.com/PolyPayAi/dujiao-next-plugin` into a new task directory. The native integration and this skill are maintained on `master`; inspect the current repository documentation before selecting a revision. Do not overwrite a populated directory.
 
 The installed skill is independent of the repository: paths below are relative to the **plugin checkout**, not to this skill's installation directory.
 

@@ -12,7 +12,7 @@ Paste this prompt into your AI coding tool (Claude Code, Cursor, Codex, etc.):
 
 ```text
 Install and use the PolyPay integration Skill for Dujiao-Next:
-https://github.com/PolyPayAi/dujiao-next-plugin/tree/feat/standalone-payments/skills/polypay-dujiao-next
+https://github.com/PolyPayAi/dujiao-next-plugin/tree/master/skills/polypay-dujiao-next
 
 Then integrate the native PolyPay payment channel into this Dujiao-Next project, configure it, and verify checkout creation and cancellation.
 ```
